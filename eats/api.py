@@ -11,17 +11,22 @@ Exposes endpoints for:
 """
 
 import asyncio
+import os
+from pathlib import Path
 from typing import List, Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from pydantic import BaseModel
 
 from .orchestrator import MultiAgentOrchestrator
 from .config_models import AgentBlueprint, TaskSpec, EvolutionConfig
 from .evolution_engine import combined_fitness
+
+# Path to static files
+STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
 # ─────────────────────────────────────────────────────────
@@ -384,6 +389,12 @@ def reset_system():
 @app.get("/", response_class=HTMLResponse, tags=["ui"])
 def root():
     """Serve the main UI page."""
+    # Try to serve from static directory first
+    static_index = STATIC_DIR / "index.html"
+    if static_index.exists():
+        return FileResponse(static_index, media_type="text/html")
+
+    # Fallback to embedded minimal UI
     return """
 <!DOCTYPE html>
 <html>
