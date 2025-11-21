@@ -2,7 +2,7 @@
 """
 EATS Core: Evolutionary Agent Tree System
 
-Optimized hackathon version v2.1 with enhanced modules:
+Production-ready version v2.2 with full feature set:
 
 Core (core.py):
 - Unified transport (PTY + tmux)
@@ -54,13 +54,33 @@ Metrics (metrics.py):
 - Cost estimation
 - Observability
 
+Providers (providers.py):
+- LLM provider abstraction
+- OpenAI, Anthropic, Ollama support
+- Unified completion interface
+
+Prompts (prompts.py):
+- Prompt template system
+- Prompt library
+- Chain-of-thought support
+
+Parsers (parsers.py):
+- Output parsing
+- JSON/code extraction
+- Structured validation
+
+Config (config.py):
+- Configuration management
+- Environment profiles
+- Secrets handling
+
 Server (server.py):
 - FastAPI server
 - Dashboard UI
 - CLI interface
 """
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 # Core components
 from .core import (
@@ -191,6 +211,90 @@ from .server import (
     run_cli,
 )
 
+# Providers
+from .providers import (
+    LLMProvider,
+    OpenAIProvider,
+    AnthropicProvider,
+    OllamaProvider,
+    MockProvider,
+    Message as ProviderMessage,
+    CompletionResponse,
+    get_provider,
+    list_providers,
+)
+
+# Prompts
+from .prompts import (
+    PromptTemplate,
+    PromptBuilder,
+    PromptLibrary,
+    PromptStyle,
+    Message as PromptMessage,
+    Example,
+    AgentPromptConfig,
+    AGENT_PROMPTS,
+    get_agent_prompt,
+    get_prompt_library,
+    get_template,
+    chain_prompts,
+    code_review,
+    bug_fix,
+    explain,
+)
+
+# Parsers
+from .parsers import (
+    OutputParser,
+    ParseResult,
+    JSONParser,
+    CodeBlockParser,
+    CodeBlock,
+    RegexParser,
+    ListParser,
+    StructuredParser,
+    FieldSpec,
+    ChoiceParser,
+    BooleanParser,
+    ScoreParser,
+    Score,
+    CompositeParser,
+    parse_json,
+    parse_code,
+    parse_list,
+    parse_bool,
+    parse_score,
+    parse_choice,
+)
+
+# Config
+from .config import (
+    EATSConfig,
+    LLMConfig,
+    SwarmConfig,
+    EvolutionConfig as EvolutionConfigFull,
+    TransportConfig,
+    PersistenceConfig,
+    MetricsConfig,
+    ServerConfig,
+    ConfigLoader,
+    ConfigValue,
+    ConfigValidator,
+    ValidationError,
+    SecretsManager,
+    Environment,
+    get_config,
+    set_config,
+    load_config,
+    reset_config,
+    get_llm_config,
+    get_swarm_config,
+    get_evolution_config,
+    get_environment,
+    is_production,
+    is_development,
+)
+
 __all__ = [
     # Version
     "__version__",
@@ -289,4 +393,76 @@ __all__ = [
     "create_app",
     "run_server",
     "run_cli",
+    # Providers
+    "LLMProvider",
+    "OpenAIProvider",
+    "AnthropicProvider",
+    "OllamaProvider",
+    "MockProvider",
+    "ProviderMessage",
+    "CompletionResponse",
+    "get_provider",
+    "list_providers",
+    # Prompts
+    "PromptTemplate",
+    "PromptBuilder",
+    "PromptLibrary",
+    "PromptStyle",
+    "PromptMessage",
+    "Example",
+    "AgentPromptConfig",
+    "AGENT_PROMPTS",
+    "get_agent_prompt",
+    "get_prompt_library",
+    "get_template",
+    "chain_prompts",
+    "code_review",
+    "bug_fix",
+    "explain",
+    # Parsers
+    "OutputParser",
+    "ParseResult",
+    "JSONParser",
+    "CodeBlockParser",
+    "CodeBlock",
+    "RegexParser",
+    "ListParser",
+    "StructuredParser",
+    "FieldSpec",
+    "ChoiceParser",
+    "BooleanParser",
+    "ScoreParser",
+    "Score",
+    "CompositeParser",
+    "parse_json",
+    "parse_code",
+    "parse_list",
+    "parse_bool",
+    "parse_score",
+    "parse_choice",
+    # Config
+    "EATSConfig",
+    "LLMConfig",
+    "SwarmConfig",
+    "EvolutionConfigFull",
+    "TransportConfig",
+    "PersistenceConfig",
+    "MetricsConfig",
+    "ServerConfig",
+    "ConfigLoader",
+    "ConfigValue",
+    "ConfigValidator",
+    "ValidationError",
+    "SecretsManager",
+    "Environment",
+    "get_config",
+    "set_config",
+    "load_config",
+    "reset_config",
+    "get_llm_config",
+    "get_swarm_config",
+    "get_evolution_config",
+    "get_environment",
+    "is_production",
+    "is_development",
 ]
