@@ -2,6 +2,39 @@
 
 A biologically-inspired multi-agent orchestration framework for terminal-driven LLM coding agents.
 
+## EATS Core v2.0 (Optimized)
+
+The `eats_core/` directory contains a **simplified, optimized rewrite** of EATS consolidating:
+
+- **Unified Transport** (`core.py`): PTY + tmux in single abstraction
+- **Agent DNA/Evolution** (`core.py`): Genetic algorithms with minimal boilerplate
+- **Hierarchical Swarm** (`swarm.py`): Tree-based multi-agent with senescence
+- **LLM Judge** (`judge.py`): Pairwise comparison, position bias mitigation
+- **Result Pipeline** (`pipeline.py`): DAG-based aggregation with fusion
+- **API + CLI** (`server.py`): FastAPI server with embedded dashboard
+
+### Quick Start (v2.0)
+
+```bash
+# Run demo
+python run_core.py demo
+
+# Start API server at http://localhost:8000
+python run_core.py server
+
+# Interactive CLI
+python run_core.py cli
+```
+
+### Minimal Dependencies
+
+Core functionality has **zero external dependencies**. Optional:
+- `fastapi` + `uvicorn` for web server
+- `libtmux` for tmux transport
+- `rich` for pretty CLI output
+
+---
+
 ## Overview
 
 EATS enables you to:
