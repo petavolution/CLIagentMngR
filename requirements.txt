@@ -1,0 +1,13 @@
+# EATS - Evolutionary Agent Tree System
+# Core dependencies for hackathon MVP
+
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+websockets>=12.0
+
+# Optional: for tmux transport (future)
+# libtmux>=0.25.0
+
+# Optional: for SSH transport (future)
+# paramiko>=3.4.0
