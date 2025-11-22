@@ -298,6 +298,15 @@ class LLMJudge:
 
         Fast fallback when LLM unavailable.
         """
+        # Handle empty/whitespace-only responses
+        if not response or not response.strip():
+            return Fitness(
+                score=0.0,
+                criteria={c.name: 0.0 for c in self.criteria},
+                justification="Empty response",
+                method="heuristic",
+            )
+
         criteria = {}
 
         # Correctness: code structure presence
