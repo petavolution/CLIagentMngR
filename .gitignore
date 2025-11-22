@@ -40,5 +40,7 @@ Thumbs.db
 
 # Project specific
 *.log
+debug-log.txt
 .coverage
 htmlcov/
+.eats_data/
