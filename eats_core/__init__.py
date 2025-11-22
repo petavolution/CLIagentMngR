@@ -179,6 +179,28 @@ from .presets import (
     DEBUGGER,
     PLANNER,
     ORCHESTRATOR,
+    # CLI Tools
+    CLIToolConfig,
+    CLI_TOOLS,
+    get_cli_tool,
+    list_cli_tools,
+    create_cli_agent,
+)
+
+# Easy API
+from .easy import (
+    AgentHandle,
+    TaskResult,
+    spawn_agent,
+    spawn_multiple,
+    stop_all,
+    run_task,
+    run_parallel,
+    save_result,
+    load_result,
+    list_results,
+    quick_run,
+    compare_tools,
 )
 
 # Persistence

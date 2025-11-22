@@ -301,9 +301,47 @@ DAG-based result aggregation:
 
 ---
 
-## 9. Usage Patterns
+## 9. CLI Tool Integration
 
-### 9.1 Basic Evolution
+### 9.1 Supported CLI Tools
+
+| Tool | Command | Description |
+|------|---------|-------------|
+| `claude-code` | `claude` | Anthropic Claude Code CLI |
+| `gemini` | `gemini chat` | Google Gemini CLI |
+| `aider` | `aider` | AI pair programming |
+| `interpreter` | `interpreter` | Open Interpreter |
+| `ollama` | `ollama run codellama` | Local LLM |
+| `python` | `python3 -i` | Python REPL |
+| `bash` | `bash` | Shell |
+
+### 9.2 Easy API
+
+```python
+from eats_core import spawn_agent, run_task, quick_run, save_result
+
+# One-liner execution
+output = quick_run('python', 'print(2**10)')  # "1024"
+
+# Full workflow
+agent = spawn_agent('gemini')  # or 'aider', 'claude-code', etc.
+result = run_task(agent, 'Write a sorting function')
+save_result('sort_task', result)
+agent.stop()
+
+# Multiple agents in parallel
+from eats_core import spawn_multiple, run_parallel, stop_all
+
+agents = spawn_multiple(['python', 'python', 'python'])
+results = run_parallel(agents, 'print("hello")')
+stop_all(agents)
+```
+
+---
+
+## 10. Usage Patterns
+
+### 10.1 Evolution
 
 ```python
 from eats_core import AgentDNA, Evolution, EvolutionConfig, heuristic_fitness
@@ -315,7 +353,7 @@ evo = Evolution(config)
 best_dna = evo.run(base_dna, heuristic_fitness)
 ```
 
-### 9.2 Hierarchical Swarm
+### 10.2 Hierarchical Swarm
 
 ```python
 from eats_core import SwarmController, AgentRole
@@ -326,7 +364,7 @@ response = swarm.ask("meta_orchestrator_1", "Implement a sorting algorithm")
 swarm.shutdown()
 ```
 
-### 9.3 Workflow Pipeline
+### 10.3 Workflow Pipeline
 
 ```python
 from eats_core import WorkflowBuilder, AsyncAgent
@@ -343,9 +381,9 @@ result = await wf.run(code="def foo(): pass")
 
 ---
 
-## 10. Success Criteria
+## 11. Success Criteria
 
-### 10.1 Technical Metrics
+### 11.1 Technical Metrics
 
 | Metric | Target |
 |--------|--------|
@@ -355,7 +393,7 @@ result = await wf.run(code="def foo(): pass")
 | Memory per agent | < 50MB |
 | API response time | < 100ms |
 
-### 10.2 Quality Metrics
+### 11.2 Quality Metrics
 
 | Metric | Target |
 |--------|--------|
@@ -365,7 +403,7 @@ result = await wf.run(code="def foo(): pass")
 
 ---
 
-## 11. Conclusion
+## 12. Conclusion
 
 EATS provides a framework for orchestrating multiple AI coding agents with biologically-inspired optimization. The system balances automation (evolution) with human control (supervision), visual debugging (GhostSwarm), and practical deployment (terminal-native design).
 
