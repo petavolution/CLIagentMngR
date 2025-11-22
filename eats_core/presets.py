@@ -600,3 +600,112 @@ def create_team_dna(
 ) -> List[AgentDNA]:
     """Create list of AgentDNA for a team."""
     return [p.to_dna(cmd) for p in get_team(team_name)]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CLI Tool Presets
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@dataclass
+class CLIToolConfig:
+    """Configuration for an external CLI coding tool."""
+    name: str
+    cmd: List[str]
+    description: str
+    requires_api_key: bool = False
+    api_key_env: str = ""
+    interactive: bool = True
+
+    def to_dna(self, role: str = "assistant", system_prompt: str = "") -> AgentDNA:
+        """Create AgentDNA configured for this CLI tool."""
+        return AgentDNA(
+            role=role or self.name,
+            cmd=self.cmd,
+            system_prompt=system_prompt or f"CLI tool: {self.name}",
+            temperature=0.7,
+        )
+
+
+# Popular CLI coding tools
+CLI_TOOLS: Dict[str, CLIToolConfig] = {
+    # Anthropic
+    "claude-code": CLIToolConfig(
+        name="claude-code",
+        cmd=["claude"],
+        description="Anthropic's Claude Code CLI for coding assistance",
+        requires_api_key=True,
+        api_key_env="ANTHROPIC_API_KEY",
+    ),
+    # Google
+    "gemini": CLIToolConfig(
+        name="gemini",
+        cmd=["gemini", "chat"],
+        description="Google Gemini CLI for AI-powered coding",
+        requires_api_key=True,
+        api_key_env="GOOGLE_API_KEY",
+    ),
+    # Open source
+    "aider": CLIToolConfig(
+        name="aider",
+        cmd=["aider"],
+        description="AI pair programming in your terminal",
+        requires_api_key=True,
+        api_key_env="OPENAI_API_KEY",
+    ),
+    "interpreter": CLIToolConfig(
+        name="open-interpreter",
+        cmd=["interpreter"],
+        description="Open Interpreter - natural language to code",
+        requires_api_key=True,
+        api_key_env="OPENAI_API_KEY",
+    ),
+    # Local/Ollama
+    "ollama": CLIToolConfig(
+        name="ollama",
+        cmd=["ollama", "run", "codellama"],
+        description="Local LLM via Ollama (CodeLlama default)",
+        requires_api_key=False,
+    ),
+    # Python
+    "python": CLIToolConfig(
+        name="python",
+        cmd=["python3", "-i", "-q"],
+        description="Interactive Python REPL",
+        requires_api_key=False,
+    ),
+    "ipython": CLIToolConfig(
+        name="ipython",
+        cmd=["ipython"],
+        description="Enhanced Python shell",
+        requires_api_key=False,
+    ),
+    # Shell
+    "bash": CLIToolConfig(
+        name="bash",
+        cmd=["bash"],
+        description="Bash shell",
+        requires_api_key=False,
+    ),
+}
+
+
+def get_cli_tool(name: str) -> Optional[CLIToolConfig]:
+    """Get CLI tool configuration by name."""
+    return CLI_TOOLS.get(name.lower())
+
+
+def list_cli_tools() -> List[CLIToolConfig]:
+    """List all available CLI tool configurations."""
+    return list(CLI_TOOLS.values())
+
+
+def create_cli_agent(
+    tool_name: str,
+    role: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+) -> Optional[AgentDNA]:
+    """Create an AgentDNA configured for a specific CLI tool."""
+    tool = get_cli_tool(tool_name)
+    if tool:
+        return tool.to_dna(role=role or tool.name, system_prompt=system_prompt or "")
+    return None
