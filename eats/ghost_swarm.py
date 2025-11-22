@@ -21,7 +21,14 @@ import argparse
 import time
 import sys
 import signal
-from typing import List, Optional
+from typing import List, Optional, Any, TYPE_CHECKING
+
+# Handle rich import with proper type hints
+if TYPE_CHECKING:
+    from rich.table import Table
+    TableType = Table
+else:
+    TableType = Any
 
 try:
     from rich.console import Console
@@ -30,6 +37,10 @@ try:
     from rich.panel import Panel
     RICH_AVAILABLE = True
 except ImportError:
+    Console = None
+    Table = None
+    Live = None
+    Panel = None
     RICH_AVAILABLE = False
 
 from .tmux_transport import (
@@ -206,7 +217,7 @@ class GhostSwarm:
         """Read recent output from an agent."""
         return self.transport.capture_output(agent_name, lines=lines)
 
-    def get_status_table(self) -> Optional[Table]:
+    def get_status_table(self) -> Optional[TableType]:
         """Create a rich table showing agent status."""
         if not RICH_AVAILABLE:
             return None

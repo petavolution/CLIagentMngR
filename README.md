@@ -2,21 +2,10 @@
 
 A biologically-inspired multi-agent orchestration framework for terminal-driven LLM coding agents.
 
-## EATS Core v2.0 (Optimized)
-
-The `eats_core/` directory contains a **simplified, optimized rewrite** of EATS consolidating:
-
-- **Unified Transport** (`core.py`): PTY + tmux in single abstraction
-- **Agent DNA/Evolution** (`core.py`): Genetic algorithms with minimal boilerplate
-- **Hierarchical Swarm** (`swarm.py`): Tree-based multi-agent with senescence
-- **LLM Judge** (`judge.py`): Pairwise comparison, position bias mitigation
-- **Result Pipeline** (`pipeline.py`): DAG-based aggregation with fusion
-- **API + CLI** (`server.py`): FastAPI server with embedded dashboard
-
-### Quick Start (v2.0)
+## Quick Start
 
 ```bash
-# Run demo
+# Run demo to verify installation
 python run_core.py demo
 
 # Start API server at http://localhost:8000
@@ -24,16 +13,39 @@ python run_core.py server
 
 # Interactive CLI
 python run_core.py cli
+
+# GhostSwarm visual mode (requires libtmux)
+python run_core.py ghost 5
+
+# Show help
+python run_core.py help
 ```
 
-### Minimal Dependencies
+## Project Structure
+
+```
+CLIagentmngr/
+├── run_core.py         # Unified entry point (use this)
+├── eats_core/          # Core v2.0 - Primary module (recommended)
+│   ├── core.py         # Transport, Agent DNA, Evolution
+│   ├── swarm.py        # Hierarchical agent tree
+│   ├── judge.py        # LLM-as-judge fitness
+│   ├── pipeline.py     # Result aggregation
+│   ├── server.py       # API + CLI
+│   └── ...
+├── eats/               # Legacy v1.0 (deprecated)
+│   ├── ghost_swarm.py  # Visual multi-terminal (still useful)
+│   └── ...
+└── docu/               # Documentation
+    └── project-vision.md
+```
+
+## Minimal Dependencies
 
 Core functionality has **zero external dependencies**. Optional:
 - `fastapi` + `uvicorn` for web server
-- `libtmux` for tmux transport
+- `libtmux` for tmux/GhostSwarm transport
 - `rich` for pretty CLI output
-
----
 
 ## Overview
 
@@ -69,36 +81,19 @@ EATS enables you to:
    └─────────┘             └─────────┘             └─────────┘
 ```
 
-## Quick Start
-
-### 1. Install Dependencies
+## Installation
 
 ```bash
-cd project1
 pip install -r requirements.txt
 ```
 
-### 2. Run the Web Server
+### GhostSwarm (Visual Multi-Terminal)
 
 ```bash
-./run_server.sh
-# or
-python -m uvicorn eats.api:app --reload --host 0.0.0.0 --port 8000
-```
+# Via unified entry point (recommended)
+python run_core.py ghost 4
 
-Then open http://localhost:8000 in your browser.
-
-### 3. CLI Supervisor
-
-```bash
-./run_cli.sh
-# or
-python -m eats.cli_supervisor
-```
-
-### 4. GhostSwarm (Visual Multi-Terminal)
-
-```bash
+# Or directly (legacy)
 python -m eats.ghost_swarm --agents 4 --layout fan
 ```
 
@@ -173,31 +168,6 @@ curl http://localhost:8000/graph
 
 # Stream events (SSE)
 curl http://localhost:8000/events
-```
-
-## Project Structure
-
-```
-eats/
-├── __init__.py           # Package init
-├── transport_pty.py      # PTY-based terminal control
-├── tmux_transport.py     # Tmux/GhostSwarm transport with GUI windows
-├── agents.py             # AgentSession, Turn classes
-├── config_models.py      # Blueprint, Task, Config dataclasses
-├── manager.py            # MetaManager (agent registry)
-├── event_bus.py          # Pub/sub event system
-├── task_graph.py         # Orchestration graph for visualization
-├── hierarchical_tree.py  # Research/Creative/Execution branches
-├── evolution_engine.py   # Genetic algorithm (mutation, selection)
-├── output_processor.py   # DAG result trees, semantic caching
-├── llm_judge.py          # LLM-as-judge fitness evaluation
-├── orchestrator.py       # High-level coordination
-├── api.py                # FastAPI server
-├── cli_supervisor.py     # Interactive CLI
-└── ghost_swarm.py        # Visual multi-terminal controller
-
-static/
-└── index.html            # Enhanced web UI with dagre layout
 ```
 
 ## Key Concepts

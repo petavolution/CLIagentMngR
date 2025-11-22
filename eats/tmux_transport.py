@@ -18,13 +18,25 @@ import os
 import time
 import threading
 import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
 from dataclasses import dataclass, field
+
+# Handle libtmux import with proper type hints
+if TYPE_CHECKING:
+    import libtmux
+    ServerType = libtmux.Server
+    SessionType = libtmux.Session
+    PaneType = libtmux.Pane
+else:
+    ServerType = Any
+    SessionType = Any
+    PaneType = Any
 
 try:
     import libtmux
     LIBTMUX_AVAILABLE = True
 except ImportError:
+    libtmux = None
     LIBTMUX_AVAILABLE = False
 
 
@@ -72,9 +84,9 @@ class TmuxTransport:
 
         self.session_name = session_name
         self.kill_existing = kill_existing
-        self.server: Optional[libtmux.Server] = None
-        self.session: Optional[libtmux.Session] = None
-        self._panes: Dict[str, libtmux.Pane] = {}
+        self.server: Optional[ServerType] = None
+        self.session: Optional[SessionType] = None
+        self._panes: Dict[str, PaneType] = {}
         self._running = False
         self._reader_threads: Dict[str, threading.Thread] = {}
         self._buffers: Dict[str, str] = {}
@@ -122,7 +134,7 @@ class TmuxTransport:
     # Agent Spawning
     # ─────────────────────────────────────────────────────
 
-    def spawn_agent(self, config: TmuxAgentConfig) -> libtmux.Pane:
+    def spawn_agent(self, config: TmuxAgentConfig) -> PaneType:
         """
         Spawn an agent in a new tmux window.
 
@@ -266,7 +278,7 @@ class TmuxTransport:
     # Background Reading
     # ─────────────────────────────────────────────────────
 
-    def _start_reader(self, agent_name: str, pane: libtmux.Pane) -> None:
+    def _start_reader(self, agent_name: str, pane: PaneType) -> None:
         """Start background thread to monitor pane output."""
         def reader_loop():
             last_content = ""
@@ -299,7 +311,7 @@ class TmuxTransport:
         """List all spawned agent names."""
         return list(self._panes.keys())
 
-    def get_pane(self, agent_name: str) -> Optional[libtmux.Pane]:
+    def get_pane(self, agent_name: str) -> Optional[PaneType]:
         """Get the raw libtmux Pane object for an agent."""
         return self._panes.get(agent_name)
 
