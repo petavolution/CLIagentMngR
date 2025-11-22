@@ -5,9 +5,10 @@ EATS - Evolutionary Agent Tree System
 Unified entry point for all EATS functionality.
 
 Usage:
+    python run_core.py demo         # Run quick demo
+    python run_core.py test         # Run test suite
     python run_core.py server       # Start API server at http://localhost:8000
     python run_core.py cli          # Interactive CLI
-    python run_core.py demo         # Run quick demo
     python run_core.py ghost [N]    # GhostSwarm with N agents (visual mode)
     python run_core.py help         # Show this help
 
@@ -137,13 +138,22 @@ def run_ghost():
         sys.exit(1)
 
 
+def run_tests():
+    """Run the test suite."""
+    from tests.test_core import main as test_main
+    # Pass remaining args to test runner
+    sys.argv = [sys.argv[0]] + sys.argv[2:]
+    test_main()
+
+
 def show_help():
     """Show help and available commands."""
     print(__doc__)
     print("\nQuick start:")
     print("  1. Run demo:    python run_core.py demo")
-    print("  2. Start API:   python run_core.py server")
-    print("  3. Open:        http://localhost:8000")
+    print("  2. Run tests:   python run_core.py test")
+    print("  3. Start API:   python run_core.py server")
+    print("  4. Open:        http://localhost:8000")
     print("\nFor programmatic use:")
     print("  from eats_core import SwarmController, AgentDNA, Evolution")
 
@@ -163,6 +173,8 @@ if __name__ == "__main__":
         run_cli()
     elif mode == "demo":
         run_demo()
+    elif mode == "test":
+        run_tests()
     elif mode == "ghost":
         run_ghost()
     elif mode in ("help", "-h", "--help"):
