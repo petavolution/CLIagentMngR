@@ -212,14 +212,33 @@ class StateManager:
     def save_dna(self, dna: AgentDNA, name: Optional[str] = None) -> str:
         """Save agent DNA to library."""
         key = f"dna/{name or dna.id}"
-        self.storage.save(key, dna.to_dict())
+        # Save full data, not the truncated to_dict() version
+        full_data = {
+            "id": dna.id,
+            "role": dna.role,
+            "system_prompt": dna.system_prompt,  # Full prompt, not truncated
+            "cmd": dna.cmd,
+            "temperature": dna.temperature,
+            "max_tokens": dna.max_tokens,
+            "timeout": dna.timeout,
+            "parent_id": dna.parent_id,
+            "generation": dna.generation,
+            "fitness_history": dna.fitness_history,
+        }
+        self.storage.save(key, full_data)
         return key
 
     def load_dna(self, name: str) -> Optional[AgentDNA]:
         """Load agent DNA from library."""
         data = self.storage.load(f"dna/{name}")
         if data:
-            return AgentDNA(**{k: v for k, v in data.items() if k != 'fitness_history'})
+            # Filter to only valid AgentDNA constructor fields
+            valid_fields = {
+                'id', 'role', 'system_prompt', 'cmd', 'temperature',
+                'max_tokens', 'timeout', 'parent_id', 'generation', 'fitness_history'
+            }
+            filtered = {k: v for k, v in data.items() if k in valid_fields}
+            return AgentDNA(**filtered)
         return None
 
     def list_dna(self) -> List[str]:

@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 """
-EATS Core - Quick Start Script
+EATS - Evolutionary Agent Tree System
+
+Unified entry point for all EATS functionality.
 
 Usage:
-    python run_core.py server   # Start API server at http://localhost:8000
-    python run_core.py cli      # Interactive CLI
-    python run_core.py demo     # Run quick demo
+    python run_core.py demo         # Run quick demo
+    python run_core.py test         # Run test suite
+    python run_core.py server       # Start API server at http://localhost:8000
+    python run_core.py cli          # Interactive CLI
+    python run_core.py ghost [N]    # GhostSwarm with N agents (visual mode)
+    python run_core.py help         # Show this help
+
+Modules:
+    eats_core/  - Core v2.0 (primary, recommended)
+    eats/       - Legacy v1.0 (deprecated, for backward compatibility)
 """
 
 import sys
@@ -14,7 +23,11 @@ import os
 # Add parent to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from eats_core.server import run_server, run_cli
+
+def lazy_import_server():
+    """Lazy import to avoid loading all modules upfront."""
+    from eats_core.server import run_server, run_cli
+    return run_server, run_cli
 
 
 def run_demo():
@@ -108,20 +121,65 @@ def run_demo():
     print("=" * 60)
 
 
+def run_ghost():
+    """Run GhostSwarm visual multi-terminal mode."""
+    try:
+        from eats.ghost_swarm import GhostSwarm
+        agents = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+        print(f"Starting GhostSwarm with {agents} agents...")
+        swarm = GhostSwarm()
+        swarm.run(agent_count=agents)
+    except ImportError as e:
+        print(f"GhostSwarm requires libtmux: pip install libtmux")
+        print(f"Error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"GhostSwarm error: {e}")
+        sys.exit(1)
+
+
+def run_tests():
+    """Run the test suite."""
+    from tests.test_core import main as test_main
+    # Pass remaining args to test runner
+    sys.argv = [sys.argv[0]] + sys.argv[2:]
+    test_main()
+
+
+def show_help():
+    """Show help and available commands."""
+    print(__doc__)
+    print("\nQuick start:")
+    print("  1. Run demo:    python run_core.py demo")
+    print("  2. Run tests:   python run_core.py test")
+    print("  3. Start API:   python run_core.py server")
+    print("  4. Open:        http://localhost:8000")
+    print("\nFor programmatic use:")
+    print("  from eats_core import SwarmController, AgentDNA, Evolution")
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(__doc__)
+        show_help()
         sys.exit(0)
 
     mode = sys.argv[1].lower()
 
     if mode == "server":
+        run_server, _ = lazy_import_server()
         run_server()
     elif mode == "cli":
+        _, run_cli = lazy_import_server()
         run_cli()
     elif mode == "demo":
         run_demo()
+    elif mode == "test":
+        run_tests()
+    elif mode == "ghost":
+        run_ghost()
+    elif mode in ("help", "-h", "--help"):
+        show_help()
     else:
         print(f"Unknown mode: {mode}")
-        print(__doc__)
+        show_help()
         sys.exit(1)
