@@ -466,6 +466,146 @@ class TestLogging:
         assert record.context["key"] == "value"
 
 
+class TestConflictResolution:
+    """Tests for conflict detection and resolution."""
+
+    def setUp(self):
+        from eats_core.conflict import (
+            ConflictDetector, ConflictResolver, ConflictType, detect_conflicts
+        )
+        from eats_core.pipeline import FusedOutput, ResultPipeline, FusionMethod
+        self.ConflictDetector = ConflictDetector
+        self.ConflictResolver = ConflictResolver
+        self.ConflictType = ConflictType
+        self.FusedOutput = FusedOutput
+        self.ResultPipeline = ResultPipeline
+        self.FusionMethod = FusionMethod
+        self.detect_conflicts = detect_conflicts
+
+    def test_boolean_contradiction(self):
+        """Test detection of boolean contradictions."""
+        detector = self.ConflictDetector()
+
+        out1 = self.FusedOutput(
+            agent_id="agent1",
+            content="The answer is yes. This is correct.",
+            fitness=7.0,
+        )
+        out2 = self.FusedOutput(
+            agent_id="agent2",
+            content="The answer is no. This is incorrect.",
+            fitness=6.0,
+        )
+
+        conflicts = detector.detect([out1, out2])
+        assert len(conflicts) == 1
+        assert conflicts[0].conflict_type == self.ConflictType.BOOLEAN
+        assert conflicts[0].severity > 0.5
+
+    def test_numerical_divergence(self):
+        """Test detection of numerical conflicts."""
+        detector = self.ConflictDetector()
+
+        out1 = self.FusedOutput(
+            agent_id="agent1",
+            content="The result is 100 units.",
+            fitness=7.0,
+        )
+        out2 = self.FusedOutput(
+            agent_id="agent2",
+            content="The result is 200 units.",
+            fitness=7.0,
+        )
+
+        conflicts = detector.detect([out1, out2])
+        assert len(conflicts) == 1
+        assert conflicts[0].conflict_type == self.ConflictType.NUMERICAL
+        assert conflicts[0].severity > 0.4
+
+    def test_no_conflict(self):
+        """Test when no conflict exists."""
+        detector = self.ConflictDetector()
+
+        out1 = self.FusedOutput(
+            agent_id="agent1",
+            content="The weather is sunny today.",
+            fitness=7.0,
+        )
+        out2 = self.FusedOutput(
+            agent_id="agent2",
+            content="It's a beautiful sunny day.",
+            fitness=7.0,
+        )
+
+        conflicts = detector.detect([out1, out2])
+        # Should find no significant conflicts
+        assert all(c.conflict_type == self.ConflictType.NONE for c in conflicts)
+
+    def test_conflict_resolver(self):
+        """Test conflict resolution."""
+        from eats_core.conflict import Conflict
+
+        resolver = self.ConflictResolver()
+
+        out1 = self.FusedOutput(
+            agent_id="agent1",
+            content="The capital of France is Paris.",
+            fitness=8.0,
+        )
+        out2 = self.FusedOutput(
+            agent_id="agent2",
+            content="The capital of France is Lyon.",
+            fitness=5.0,
+        )
+
+        conflict = Conflict(
+            outputs=[out1, out2],
+            conflict_type=self.ConflictType.FACTUAL,
+            severity=0.8,
+            description="Contradictory capital cities",
+        )
+
+        resolution = resolver.resolve(conflict)
+        assert resolution.agent_id == "conflict_resolver"
+        assert resolution.fitness >= 0.0
+        assert len(resolution.content) > 50  # Should be substantial
+        assert len(resolution.source_ids) == 2
+
+    def test_pipeline_integration(self):
+        """Test conflict resolution integrated with ResultPipeline."""
+        pipeline = self.ResultPipeline()
+
+        # Add contradictory outputs
+        out1 = pipeline.add("agent1", "The answer is yes.", fitness=7.0)
+        out2 = pipeline.add("agent2", "The answer is no.", fitness=7.0)
+
+        # Fuse with arbitration
+        result = pipeline.fuse(
+            ["agent1", "agent2"],
+            method=self.FusionMethod.ARBITRATION,
+        )
+
+        assert result is not None
+        assert len(result.content) > 0
+        assert result.fitness >= 0.0
+
+    def test_convenience_functions(self):
+        """Test convenience functions."""
+        out1 = self.FusedOutput(
+            agent_id="agent1",
+            content="True statement.",
+            fitness=7.0,
+        )
+        out2 = self.FusedOutput(
+            agent_id="agent2",
+            content="False statement.",
+            fitness=7.0,
+        )
+
+        conflicts = self.detect_conflicts([out1, out2])
+        assert isinstance(conflicts, list)
+
+
 # ============================================================
 # Main
 # ============================================================
@@ -480,6 +620,7 @@ ALL_TEST_CLASSES = [
     TestMockProvider,
     TestPersistence,
     TestLogging,
+    TestConflictResolution,
 ]
 
 

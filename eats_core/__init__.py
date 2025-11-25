@@ -29,6 +29,11 @@ Pipeline (pipeline.py):
 - Fusion methods
 - Semantic caching
 
+Conflict (conflict.py):
+- Contradiction detection
+- Meta-agent arbitration
+- Multi-strategy resolution
+
 Events (events.py):
 - Real-time pub/sub
 - SSE streaming
@@ -119,6 +124,16 @@ from .pipeline import (
     ResultPipeline,
     FusedOutput,
     FusionMethod,
+)
+
+# Conflict resolution
+from .conflict import (
+    ConflictDetector,
+    ConflictResolver,
+    Conflict,
+    ConflictType,
+    detect_conflicts,
+    resolve_conflict,
 )
 
 # Async execution
@@ -365,6 +380,13 @@ __all__ = [
     "ResultPipeline",
     "FusedOutput",
     "FusionMethod",
+    # Conflict Resolution
+    "ConflictDetector",
+    "ConflictResolver",
+    "Conflict",
+    "ConflictType",
+    "detect_conflicts",
+    "resolve_conflict",
     # Async
     "AsyncAgent",
     "TaskResult",
