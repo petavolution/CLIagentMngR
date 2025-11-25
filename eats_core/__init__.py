@@ -152,6 +152,23 @@ from .cli_orchestrator import (
     quick_chain,
 )
 
+# Project Context
+from .project_context import (
+    ProjectContext,
+    ProjectInfo,
+    ProjectLanguage,
+    detect_project,
+    get_context,
+)
+
+# Workflow Templates
+from .workflow_templates import (
+    WorkflowTemplates,
+    quick_feature,
+    quick_bugfix,
+    quick_review,
+)
+
 # Async execution
 from .async_core import (
     AsyncAgent,
@@ -410,6 +427,17 @@ __all__ = [
     "WorkflowPatterns",
     "run_sequence",
     "quick_chain",
+    # Project Context
+    "ProjectContext",
+    "ProjectInfo",
+    "ProjectLanguage",
+    "detect_project",
+    "get_context",
+    # Workflow Templates
+    "WorkflowTemplates",
+    "quick_feature",
+    "quick_bugfix",
+    "quick_review",
     # Async
     "AsyncAgent",
     "TaskResult",
