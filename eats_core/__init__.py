@@ -34,6 +34,12 @@ Conflict (conflict.py):
 - Meta-agent arbitration
 - Multi-strategy resolution
 
+CLI Orchestrator (cli_orchestrator.py):
+- Sequence AI CLI tools
+- Parse outputs intelligently
+- Chain tools with context
+- Pre-built workflow patterns
+
 Events (events.py):
 - Real-time pub/sub
 - SSE streaming
@@ -134,6 +140,16 @@ from .conflict import (
     ConflictType,
     detect_conflicts,
     resolve_conflict,
+)
+
+# CLI Orchestrator
+from .cli_orchestrator import (
+    CLISequence,
+    SequenceStep,
+    OutputParser,
+    WorkflowPatterns,
+    run_sequence,
+    quick_chain,
 )
 
 # Async execution
@@ -387,6 +403,13 @@ __all__ = [
     "ConflictType",
     "detect_conflicts",
     "resolve_conflict",
+    # CLI Orchestrator
+    "CLISequence",
+    "SequenceStep",
+    "OutputParser",
+    "WorkflowPatterns",
+    "run_sequence",
+    "quick_chain",
     # Async
     "AsyncAgent",
     "TaskResult",
