@@ -26,6 +26,7 @@ Example:
 """
 
 from __future__ import annotations
+import os
 import re
 import json
 import time
@@ -34,10 +35,120 @@ from typing import List, Optional, Dict, Any, Callable, Pattern
 from enum import Enum
 
 from .core import Agent, AgentDNA
-from .presets import get_cli_tool, CLI_TOOLS
+from .presets import get_cli_tool, CLI_TOOLS, CLIToolConfig
 from .logging import get_logger
 
 logger = get_logger("orchestrator")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Security: Command Validation
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class SecurityError(Exception):
+    """Raised when a security policy is violated."""
+    pass
+
+
+# Allowlist of approved command executables
+# SECURITY: Only these commands can be executed by the orchestrator
+APPROVED_COMMANDS = {
+    # AI coding CLIs
+    "claude", "claude-code",
+    "gemini",
+    "aider",
+    "interpreter",
+    # Local LLMs
+    "ollama",
+    # Programming languages (REPL mode only)
+    "python", "python3",
+    "ipython",
+    "node",
+    "ruby", "irb",
+    # Development tools (read-only operations)
+    "git",
+    # Safe shells (for testing/dev only)
+    "bash", "sh",
+}
+
+
+def validate_command(cmd: List[str]) -> None:
+    """
+    Validate that a command is safe to execute.
+
+    Enforces security policy:
+    - Command executable must be in APPROVED_COMMANDS allowlist
+    - No shell metacharacters in arguments
+    - No dangerous flags (e.g., -c for arbitrary code execution)
+
+    Args:
+        cmd: Command as list of strings [executable, arg1, arg2, ...]
+
+    Raises:
+        SecurityError: If command violates security policy
+        ValueError: If command is malformed
+    """
+    if not cmd or not isinstance(cmd, list):
+        raise ValueError("Command must be a non-empty list")
+
+    # Check executable is approved
+    executable = os.path.basename(cmd[0])
+    if executable not in APPROVED_COMMANDS:
+        raise SecurityError(
+            f"Command '{executable}' not in approved list. "
+            f"Approved commands: {', '.join(sorted(APPROVED_COMMANDS))}"
+        )
+
+    # Check for dangerous patterns in arguments
+    dangerous_flags = {
+        "-c",  # bash -c "arbitrary code"
+        "-e",  # python -c "code" (when followed by code)
+        "--eval",
+    }
+
+    for i, arg in enumerate(cmd):
+        # Check for shell metacharacters that could enable injection
+        if any(char in arg for char in [";", "|", "&", "$", "`", "\n", "\r"]):
+            raise SecurityError(
+                f"Shell metacharacters detected in argument: {arg}"
+            )
+
+        # Check for dangerous flags
+        if arg in dangerous_flags:
+            # Allow some safe usages (e.g., python -i -c is blocked, but python -i is ok)
+            if i + 1 < len(cmd):
+                raise SecurityError(
+                    f"Dangerous flag '{arg}' detected with argument. "
+                    f"Arbitrary code execution not allowed."
+                )
+
+    logger.debug(f"Command validated: {cmd[0]}")
+
+
+def validate_cli_tool(tool_name: str) -> CLIToolConfig:
+    """
+    Get and validate a CLI tool configuration.
+
+    Args:
+        tool_name: Name of the CLI tool
+
+    Returns:
+        Validated CLIToolConfig
+
+    Raises:
+        SecurityError: If tool is not found or fails validation
+    """
+    tool_config = get_cli_tool(tool_name)
+    if not tool_config:
+        raise SecurityError(f"Unknown or unauthorized tool: {tool_name}")
+
+    # Validate the tool's command
+    try:
+        validate_command(tool_config.cmd)
+    except (SecurityError, ValueError) as e:
+        raise SecurityError(f"Tool '{tool_name}' has invalid command: {e}")
+
+    return tool_config
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -110,12 +221,61 @@ class OutputParser:
         return blocks[0]["code"]
 
     @classmethod
+    def sanitize_for_chaining(cls, text: str, max_length: int = 5000) -> str:
+        """
+        Sanitize LLM output before using in subsequent prompts.
+
+        Removes potential prompt injection patterns that could hijack
+        downstream agents:
+        - System-level tokens
+        - Instruction override attempts
+        - Special control sequences
+
+        Args:
+            text: Raw LLM output
+            max_length: Maximum length to include (truncate longer outputs)
+
+        Returns:
+            Sanitized text safe to include in prompts
+        """
+        # Remove dangerous prompt injection patterns
+        dangerous_patterns = [
+            (r"<\|im_start\|>.*?<\|im_end\|>", "[REDACTED_CONTROL_TOKEN]"),
+            (r"<\|system\|>", "[REDACTED]"),
+            (r"<\|assistant\|>", "[REDACTED]"),
+            (r"<\|user\|>", "[REDACTED]"),
+            (r"\bSYSTEM\s*:", "[REDACTED]:"),
+            (r"\bASSISTANT\s*:", "[REDACTED]:"),
+            (r"(?i)ignore\s+(all\s+)?previous\s+instructions?", "[INSTRUCTION_OVERRIDE_ATTEMPT]"),
+            (r"(?i)you\s+are\s+now", "[ROLE_OVERRIDE_ATTEMPT]"),
+            (r"(?i)forget\s+(all\s+)?prior", "[MEMORY_OVERRIDE_ATTEMPT]"),
+            (r"(?i)disregard\s+(all\s+)?above", "[INSTRUCTION_OVERRIDE_ATTEMPT]"),
+        ]
+
+        sanitized = text
+        for pattern, replacement in dangerous_patterns:
+            sanitized = re.sub(pattern, replacement, sanitized, flags=re.MULTILINE | re.DOTALL)
+
+        # Truncate to reasonable size
+        if len(sanitized) > max_length:
+            sanitized = sanitized[:max_length] + "\n[... output truncated for safety ...]"
+
+        return sanitized
+
+    @classmethod
     def summarize_output(cls, text: str, max_length: int = 500) -> str:
-        """Create a summary of output for chaining."""
-        # Extract key information
-        has_code = bool(cls.CODE_BLOCK.search(text))
-        has_errors = cls.has_errors(text)
-        files = cls.extract_file_paths(text)
+        """
+        Create a summary of output for chaining.
+
+        SECURITY: This method sanitizes output to prevent prompt injection.
+        """
+        # Sanitize first to remove injection attempts
+        sanitized = cls.sanitize_for_chaining(text, max_length=5000)
+
+        # Extract key information from sanitized text
+        has_code = bool(cls.CODE_BLOCK.search(sanitized))
+        has_errors = cls.has_errors(sanitized)
+        files = cls.extract_file_paths(sanitized)
 
         summary_parts = []
 
@@ -127,12 +287,12 @@ class OutputParser:
             summary_parts.append(f"Modified files: {', '.join(files[:3])}")
 
         # Add truncated output
-        if len(text) > max_length:
-            summary_parts.append(f"\n\nOutput preview:\n{text[:max_length]}...")
+        if len(sanitized) > max_length:
+            summary_parts.append(f"\n\nOutput preview:\n{sanitized[:max_length]}...")
         else:
-            summary_parts.append(f"\n\nOutput:\n{text}")
+            summary_parts.append(f"\n\nOutput:\n{sanitized}")
 
-        return " | ".join(summary_parts) if summary_parts else text[:max_length]
+        return " | ".join(summary_parts) if summary_parts else sanitized[:max_length]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -252,14 +412,20 @@ class CLISequence:
         return self._build_result(total_duration)
 
     def _execute_step(self, step: SequenceStep, prompt: str) -> str:
-        """Execute a single step."""
+        """
+        Execute a single step.
+
+        SECURITY: Validates tool configuration before execution.
+
+        Raises:
+            SecurityError: If tool fails security validation
+        """
         start = time.time()
 
         # Get or create agent
         if step.tool_name not in self.agents:
-            tool_config = get_cli_tool(step.tool_name)
-            if not tool_config:
-                raise ValueError(f"Unknown tool: {step.tool_name}")
+            # SECURITY: Validate tool before creating agent
+            tool_config = validate_cli_tool(step.tool_name)
 
             dna = AgentDNA(
                 role=tool_config.name,

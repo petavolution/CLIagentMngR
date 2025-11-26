@@ -16,6 +16,11 @@ import time
 from typing import Optional, List
 
 
+class BufferOverflowError(Exception):
+    """Raised when buffer exceeds maximum size."""
+    pass
+
+
 class PTYTransport:
     """
     PTY-based transport for an interactive CLI process.
@@ -24,6 +29,11 @@ class PTYTransport:
     - Continuously reads from the PTY in a background thread.
     - Accumulates output into an internal buffer.
     - Exposes send()/recv() methods for higher-level agent code.
+
+    Security Features:
+    - Bounded buffers to prevent memory exhaustion
+    - Ring buffer for full_log to prevent unbounded growth
+    - Raises BufferOverflowError if limits exceeded
 
     Usage:
         transport = PTYTransport(cmd=["aider"], name="coder-001")
@@ -34,7 +44,13 @@ class PTYTransport:
         transport.terminate()
     """
 
-    def __init__(self, cmd: List[str], name: str = "agent"):
+    # Security limits
+    MAX_BUFFER_SIZE = 10 * 1024 * 1024   # 10MB max buffer
+    MAX_LOG_SIZE = 50 * 1024 * 1024      # 50MB max full log (ring buffer)
+
+    def __init__(self, cmd: List[str], name: str = "agent",
+                 max_buffer_size: Optional[int] = None,
+                 max_log_size: Optional[int] = None):
         self.cmd = cmd
         self.name = name
 
@@ -46,6 +62,11 @@ class PTYTransport:
         self._full_log = ""  # Complete history for debugging
         self._running = False
         self._reader_thread: Optional[threading.Thread] = None
+        self._overflow_error: Optional[Exception] = None
+
+        # Configurable limits
+        self.max_buffer_size = max_buffer_size or self.MAX_BUFFER_SIZE
+        self.max_log_size = max_log_size or self.MAX_LOG_SIZE
 
     # ─────────────────────────────────────────────────────
     # Lifecycle
@@ -96,6 +117,11 @@ class PTYTransport:
     def _reader_loop(self) -> None:
         """
         Background loop: read from PTY and append to buffer.
+
+        Security: Enforces buffer limits to prevent memory exhaustion.
+        - Current buffer limited to max_buffer_size
+        - Full log uses ring buffer (keeps last N bytes)
+        - Sets overflow error if limits exceeded
         """
         assert self.master_fd is not None
         while self._running:
@@ -112,9 +138,25 @@ class PTYTransport:
                 if not data:
                     break
                 text = data.decode("utf-8", errors="ignore")
+
                 with self._lock:
+                    # Check buffer limit before append
+                    if len(self._buffer) + len(text) > self.max_buffer_size:
+                        self._overflow_error = BufferOverflowError(
+                            f"Buffer exceeded {self.max_buffer_size} bytes. "
+                            f"Process '{self.name}' generating too much output."
+                        )
+                        self._running = False
+                        break
+
                     self._buffer += text
+
+                    # Ring buffer for full_log - keep last N bytes
                     self._full_log += text
+                    if len(self._full_log) > self.max_log_size:
+                        # Keep last max_log_size bytes
+                        excess = len(self._full_log) - self.max_log_size
+                        self._full_log = self._full_log[excess:]
             else:
                 time.sleep(0.01)
 
@@ -163,8 +205,17 @@ class PTYTransport:
         """
         Return any accumulated output and clear internal buffer.
         Non-blocking: if nothing new, returns empty string.
+
+        Raises:
+            BufferOverflowError: If buffer exceeded limits during read
         """
         with self._lock:
+            # Check for overflow error from reader thread
+            if self._overflow_error:
+                error = self._overflow_error
+                self._overflow_error = None
+                raise error
+
             data = self._buffer
             self._buffer = ""
         return data
