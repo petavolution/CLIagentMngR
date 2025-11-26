@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import pty
 import select
+import shlex
 import subprocess
 import threading
 import time
@@ -18,6 +19,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Callable, Any, Protocol
 from enum import Enum
+
+# Late import to avoid circular dependency
+def _get_audit_logger():
+    """Lazy import audit logger to avoid circular deps."""
+    try:
+        from .audit import get_audit_logger
+        return get_audit_logger()
+    except ImportError:
+        return None
 
 # Optional libtmux support
 try:
@@ -86,15 +96,28 @@ class Transport(ABC):
         return output
 
 
+class BufferOverflowError(Exception):
+    """Raised when buffer exceeds maximum size."""
+    pass
+
+
 class PTYTransport(Transport):
     """
     PTY-based transport for LLM CLI processes.
 
     Uses pseudo-terminal for full interactive control with
     background thread for non-blocking reads.
+
+    Security Features:
+    - Bounded buffers to prevent memory exhaustion
+    - Raises BufferOverflowError if limits exceeded
     """
 
-    def __init__(self, cmd: List[str], name: str = "agent"):
+    # Security limits
+    MAX_BUFFER_SIZE = 10 * 1024 * 1024   # 10MB max buffer
+
+    def __init__(self, cmd: List[str], name: str = "agent",
+                 max_buffer_size: Optional[int] = None):
         self.cmd = cmd
         self.name = name
         self._master_fd: Optional[int] = None
@@ -103,6 +126,10 @@ class PTYTransport(Transport):
         self._lock = threading.Lock()
         self._running = False
         self._reader: Optional[threading.Thread] = None
+        self._overflow_error: Optional[Exception] = None
+
+        # Configurable limit
+        self.max_buffer_size = max_buffer_size or self.MAX_BUFFER_SIZE
 
     def start(self) -> None:
         if self._proc is not None:
@@ -140,6 +167,7 @@ class PTYTransport(Transport):
         self._reader.start()
 
     def _read_loop(self) -> None:
+        """Background read loop with buffer overflow protection."""
         while self._running and self._master_fd:
             try:
                 r, _, _ = select.select([self._master_fd], [], [], 0.1)
@@ -147,8 +175,30 @@ class PTYTransport(Transport):
                     data = os.read(self._master_fd, 4096)
                     if not data:
                         break
+                    text = data.decode("utf-8", errors="replace")
+
                     with self._lock:
-                        self._buffer += data.decode("utf-8", errors="replace")
+                        # Check buffer limit before append
+                        if len(self._buffer) + len(text) > self.max_buffer_size:
+                            buffer_size = len(self._buffer) + len(text)
+                            self._overflow_error = BufferOverflowError(
+                                f"Buffer exceeded {self.max_buffer_size} bytes. "
+                                f"Process '{self.name}' generating too much output."
+                            )
+
+                            # AUDIT: Log buffer overflow
+                            audit = _get_audit_logger()
+                            if audit:
+                                audit.log_buffer_overflow(
+                                    agent_name=self.name,
+                                    buffer_size=buffer_size,
+                                    max_size=self.max_buffer_size
+                                )
+
+                            self._running = False
+                            break
+
+                        self._buffer += text
             except (OSError, ValueError):
                 break
 
@@ -159,8 +209,20 @@ class PTYTransport(Transport):
         os.write(self._master_fd, data)
 
     def recv(self, timeout: float = 0.1) -> str:
+        """
+        Receive buffered data.
+
+        Raises:
+            BufferOverflowError: If buffer exceeded limits during read
+        """
         time.sleep(min(timeout, 0.05))  # Small delay for buffer fill
         with self._lock:
+            # Check for overflow error from reader thread
+            if self._overflow_error:
+                error = self._overflow_error
+                self._overflow_error = None
+                raise error
+
             data = self._buffer
             self._buffer = ""
         return data
@@ -228,8 +290,8 @@ class TmuxTransport(Transport):
         # Create window and pane
         self._pane = self._session.active_window.active_pane
 
-        # Start command in pane
-        cmd_str = " ".join(self.cmd)
+        # Start command in pane - SECURITY: properly escape command args
+        cmd_str = " ".join(shlex.quote(arg) for arg in self.cmd)
         self._pane.send_keys(cmd_str, enter=True)
 
         # Optionally spawn GUI terminal
@@ -238,18 +300,23 @@ class TmuxTransport(Transport):
 
     def _spawn_gui_window(self) -> None:
         """Spawn a visible terminal attached to the tmux session."""
-        attach_cmd = f"tmux attach -t {self.session_name}"
-
+        # SECURITY: Use array form to prevent command injection via session_name
         if self.terminal == "alacritty":
-            subprocess.Popen(["alacritty", "-e", "sh", "-c", attach_cmd])
+            subprocess.Popen(["alacritty", "-e", "tmux", "attach", "-t", self.session_name])
         elif self.terminal == "kitty":
-            subprocess.Popen(["kitty", "-e", "sh", "-c", attach_cmd])
+            subprocess.Popen(["kitty", "-e", "tmux", "attach", "-t", self.session_name])
         elif self.terminal == "gnome-terminal":
-            subprocess.Popen(["gnome-terminal", "--", "sh", "-c", attach_cmd])
+            subprocess.Popen(["gnome-terminal", "--", "tmux", "attach", "-t", self.session_name])
         else:  # xterm fallback
-            subprocess.Popen(["xterm", "-e", attach_cmd])
+            subprocess.Popen(["xterm", "-e", "tmux", "attach", "-t", self.session_name])
 
     def send(self, text: str, newline: bool = True) -> None:
+        """
+        Send text to tmux pane.
+
+        WARNING: Text is sent as-is to the shell. Caller must sanitize
+        if text comes from untrusted sources to prevent command injection.
+        """
         if not self._pane:
             raise RuntimeError("Not started")
         self._pane.send_keys(text, enter=newline)

@@ -298,6 +298,51 @@ def create_app() -> Any:
         return result
 
     # ─────────────────────────────────────────────────────
+    # Conflict Resolution Endpoints
+    # ─────────────────────────────────────────────────────
+
+    @app.post("/conflicts/detect")
+    async def detect_conflicts(agent_ids: List[str]):
+        """Detect conflicts between outputs from specified agents."""
+        if not state.pipeline:
+            raise HTTPException(500, "Pipeline not initialized")
+
+        from .conflict import ConflictDetector
+        detector = ConflictDetector()
+
+        # Get outputs
+        outputs = []
+        for agent_id in agent_ids:
+            agent_outputs = state.pipeline.get_by_agent(agent_id)
+            outputs.extend(agent_outputs)
+
+        if not outputs:
+            return {"conflicts": [], "count": 0}
+
+        # Detect conflicts
+        conflicts = detector.detect(outputs)
+        return {
+            "conflicts": [c.to_dict() for c in conflicts],
+            "count": len(conflicts),
+        }
+
+    @app.post("/conflicts/resolve")
+    async def resolve_conflict_endpoint(agent_ids: List[str]):
+        """Resolve conflicts between outputs using arbitration."""
+        if not state.pipeline:
+            raise HTTPException(500, "Pipeline not initialized")
+
+        # Use pipeline's built-in resolution
+        try:
+            result = state.pipeline.fuse(
+                agent_ids,
+                method=FusionMethod.ARBITRATION,
+            )
+            return {"resolution": result.to_dict(), "success": True}
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    # ─────────────────────────────────────────────────────
     # Server-Sent Events
     # ─────────────────────────────────────────────────────
 

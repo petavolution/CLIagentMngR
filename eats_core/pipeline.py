@@ -13,8 +13,11 @@ from __future__ import annotations
 import time
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Callable, Any
+from typing import Dict, List, Optional, Callable, Any, TYPE_CHECKING
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .conflict import ConflictDetector, ConflictResolver
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -27,6 +30,7 @@ class FusionMethod(str, Enum):
     SYNTHESIZE = "synthesize"  # Weighted combination
     ROLLUP = "rollup"       # Hierarchical consolidation
     CONCAT = "concat"       # Simple concatenation
+    ARBITRATION = "arbitration"  # Conflict resolution via meta-agent
 
 
 @dataclass
@@ -110,6 +114,7 @@ class ResultPipeline:
         self,
         fitness_fn: Optional[Callable[[str], float]] = None,
         synthesize_fn: Optional[Callable[[str, Optional[str]], str]] = None,
+        enable_conflict_resolution: bool = False,
     ):
         self._nodes: Dict[str, DAGNode] = {}
         self._cache: Dict[str, str] = {}  # hash -> node_id
@@ -118,6 +123,11 @@ class ResultPipeline:
 
         self._fitness_fn = fitness_fn or self._default_fitness
         self._synthesize_fn = synthesize_fn or self._default_synthesize
+
+        # Conflict resolution (lazy init)
+        self._enable_conflict_resolution = enable_conflict_resolution
+        self._conflict_detector: Optional[ConflictDetector] = None
+        self._conflict_resolver: Optional[ConflictResolver] = None
 
     # ─────────────────────────────────────────────────────
     # Add Outputs
@@ -250,8 +260,64 @@ class ResultPipeline:
             return self._synthesize(outputs)
         elif method == FusionMethod.CONCAT:
             return self._concat(outputs)
+        elif method == FusionMethod.ARBITRATION:
+            return self.fuse_with_resolution(identifiers)
         else:
             return self._vote(outputs)
+
+    def fuse_with_resolution(
+        self,
+        identifiers: List[str],
+        auto_detect: bool = True,
+    ) -> FusedOutput:
+        """
+        Fuse outputs with automatic conflict detection and resolution.
+
+        Args:
+            identifiers: List of node/agent IDs to fuse
+            auto_detect: Whether to auto-detect conflicts (default: True)
+
+        Returns:
+            Fused output (resolution if conflict found, otherwise synthesis)
+        """
+        # Lazy init conflict resolution
+        if not self._conflict_detector or not self._conflict_resolver:
+            self._init_conflict_resolution()
+
+        # Collect outputs
+        outputs = []
+        for ident in identifiers:
+            node = self._find_node(ident)
+            if node:
+                outputs.append(node.output)
+
+        if not outputs:
+            raise ValueError("No outputs found to fuse")
+
+        # Detect conflicts
+        conflicts = []
+        if auto_detect and self._conflict_detector:
+            conflicts = self._conflict_detector.detect(outputs)
+
+        # Resolve if conflicts found
+        if conflicts and self._conflict_resolver:
+            # Resolve most severe conflict
+            conflict = max(conflicts, key=lambda c: c.severity)
+            return self._conflict_resolver.resolve(conflict)
+
+        # Fallback to synthesis
+        return self._synthesize(outputs)
+
+    def _init_conflict_resolution(self) -> None:
+        """Lazy initialization of conflict resolution components."""
+        if self._conflict_detector and self._conflict_resolver:
+            return
+
+        # Import here to avoid circular dependency
+        from .conflict import ConflictDetector, ConflictResolver
+
+        self._conflict_detector = ConflictDetector(use_llm=False)
+        self._conflict_resolver = ConflictResolver()
 
     def _vote(self, outputs: List[FusedOutput]) -> FusedOutput:
         """Select output with highest fitness."""

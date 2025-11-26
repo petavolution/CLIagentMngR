@@ -15,6 +15,7 @@ Features:
 """
 
 import os
+import shlex
 import time
 import threading
 import subprocess
@@ -156,13 +157,14 @@ class TmuxTransport:
         if config.spawn_gui:
             self._spawn_gui_terminal(config)
 
-        # Start the agent command
+        # Start the agent command - SECURITY: properly escape command args
         if config.command:
-            cmd_str = " ".join(config.command)
+            cmd_str = " ".join(shlex.quote(arg) for arg in config.command)
             pane.send_keys(cmd_str, enter=True)
             time.sleep(0.5)  # Allow command to start
 
         # Inject task prompt as initial context
+        # NOTE: task_prompt is sent to shell, but prefixed with # so it's a comment
         if config.task_prompt:
             pane.send_keys(f"# TASK: {config.task_prompt}", enter=True)
 
