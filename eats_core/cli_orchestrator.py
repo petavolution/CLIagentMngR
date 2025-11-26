@@ -34,10 +34,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Callable, Pattern
 from enum import Enum
 
-from .core import Agent, AgentDNA
+from .transport import Transport, PTYTransport, create_transport
 from .presets import get_cli_tool, CLI_TOOLS, CLIToolConfig
 from .logging import get_logger
 from .audit import get_audit_logger, AuditLogger
+from .cli_persistence import SequencePersistence, get_persistence
 
 logger = get_logger("orchestrator")
 audit = get_audit_logger()
@@ -358,11 +359,14 @@ class CLISequence:
         result = seq.run()
     """
 
-    def __init__(self, name: str = "sequence"):
+    def __init__(self, name: str = "sequence", auto_save: bool = True):
         self.name = name
         self.steps: List[SequenceStep] = []
-        self.agents: Dict[str, Agent] = {}
+        self.transports: Dict[str, Transport] = {}
         self.parser = OutputParser()
+        self.auto_save = auto_save
+        self.sequence_id: Optional[str] = None
+        self.started_at: Optional[float] = None
 
     def add_step(
         self,
@@ -393,6 +397,8 @@ class CLISequence:
         """
         logger.info(f"Running sequence '{self.name}' with {len(self.steps)} steps")
         start_time = time.time()
+        self.started_at = start_time
+        self.sequence_id = f"seq-{int(start_time * 1000):x}"
 
         previous_output = ""
 
@@ -429,8 +435,18 @@ class CLISequence:
                 break
 
         total_duration = time.time() - start_time
+        result = self._build_result(total_duration)
 
-        return self._build_result(total_duration)
+        # Auto-save if enabled
+        if self.auto_save:
+            try:
+                persistence = get_persistence()
+                persistence.save_sequence(result)
+                logger.info(f"Sequence '{self.name}' saved with ID: {self.sequence_id}")
+            except Exception as e:
+                logger.error(f"Failed to save sequence: {e}")
+
+        return result
 
     def _execute_step(self, step: SequenceStep, prompt: str) -> str:
         """
@@ -443,28 +459,27 @@ class CLISequence:
         """
         start = time.time()
 
-        # Get or create agent
-        if step.tool_name not in self.agents:
-            # SECURITY: Validate tool before creating agent
+        # Get or create transport
+        if step.tool_name not in self.transports:
+            # SECURITY: Validate tool before creating transport
             tool_config = validate_cli_tool(step.tool_name)
 
-            dna = AgentDNA(
-                role=tool_config.name,
-                system_prompt=f"You are {tool_config.description}",
+            transport = create_transport(
                 cmd=tool_config.cmd,
+                transport_type="pty",
+                name=tool_config.name,
             )
 
-            agent = Agent(dna)
-            agent.start()
-            self.agents[step.tool_name] = agent
+            transport.start()
+            self.transports[step.tool_name] = transport
 
-            # AUDIT: Log agent start
+            # AUDIT: Log transport start
             audit.log_agent_started(
-                agent_name=agent.id,
+                agent_name=tool_config.name,
                 cmd=tool_config.cmd
             )
 
-        agent = self.agents[step.tool_name]
+        transport = self.transports[step.tool_name]
 
         # AUDIT: Log step start
         audit.log_step_started(
@@ -475,7 +490,7 @@ class CLISequence:
 
         # Send prompt and get response
         try:
-            response = agent.ask(prompt, timeout=step.timeout)
+            response = transport.send_and_wait(prompt, wait_seconds=step.timeout)
             step.duration = time.time() - start
 
             # AUDIT: Log step completion
@@ -510,36 +525,47 @@ class CLISequence:
     def _build_result(self, total_duration: float) -> Dict[str, Any]:
         """Build final result summary."""
         successful_steps = sum(1 for s in self.steps if s.success)
+        has_error = any(not s.success for s in self.steps)
 
         return {
+            "id": self.sequence_id,
             "name": self.name,
+            "status": "failed" if has_error else "completed",
+            "started_at": self.started_at,
+            "completed_at": time.time(),
             "total_steps": len(self.steps),
             "successful_steps": successful_steps,
             "duration": total_duration,
+            "error_message": self.steps[-1].error if has_error else None,
+            "tags": [],  # Can be extended later
             "steps": [
                 {
-                    "tool": s.tool_name,
-                    "prompt": s.prompt[:100] + "..." if len(s.prompt) > 100 else s.prompt,
+                    "tool_name": s.tool_name,
+                    "prompt": s.prompt,
+                    "raw_output": s.raw_output or "",
                     "success": s.success,
                     "duration": s.duration,
                     "parsed_data": s.parsed_data,
-                    "error": s.error,
+                    "error_message": s.error,
+                    "timestamp": self.started_at + sum(st.duration or 0 for st in self.steps[:i]),
+                    "status": "success" if s.success else "failed",
                 }
-                for s in self.steps
+                for i, s in enumerate(self.steps)
             ],
             "final_output": self.steps[-1].raw_output if self.steps and self.steps[-1].success else None,
         }
 
     def cleanup(self):
-        """Stop all agents."""
-        for agent in self.agents.values():
-            # AUDIT: Log agent stop
+        """Stop all transports."""
+        for tool_name, transport in self.transports.items():
+            # AUDIT: Log transport stop
+            total_duration = sum(s.duration for s in self.steps if s.tool_name == tool_name and s.duration)
             audit.log_agent_stopped(
-                agent_name=agent.id,
-                runtime_seconds=sum(t.duration for t in agent.turns) if agent.turns else 0
+                agent_name=tool_name,
+                runtime_seconds=total_duration
             )
-            agent.stop()
-        self.agents.clear()
+            transport.terminate()
+        self.transports.clear()
         logger.info(f"Sequence '{self.name}' cleanup complete")
 
 
