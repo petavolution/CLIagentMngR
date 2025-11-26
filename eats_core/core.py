@@ -20,6 +20,15 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Callable, Any, Protocol
 from enum import Enum
 
+# Late import to avoid circular dependency
+def _get_audit_logger():
+    """Lazy import audit logger to avoid circular deps."""
+    try:
+        from .audit import get_audit_logger
+        return get_audit_logger()
+    except ImportError:
+        return None
+
 # Optional libtmux support
 try:
     import libtmux
@@ -171,10 +180,21 @@ class PTYTransport(Transport):
                     with self._lock:
                         # Check buffer limit before append
                         if len(self._buffer) + len(text) > self.max_buffer_size:
+                            buffer_size = len(self._buffer) + len(text)
                             self._overflow_error = BufferOverflowError(
                                 f"Buffer exceeded {self.max_buffer_size} bytes. "
                                 f"Process '{self.name}' generating too much output."
                             )
+
+                            # AUDIT: Log buffer overflow
+                            audit = _get_audit_logger()
+                            if audit:
+                                audit.log_buffer_overflow(
+                                    agent_name=self.name,
+                                    buffer_size=buffer_size,
+                                    max_size=self.max_buffer_size
+                                )
+
                             self._running = False
                             break
 

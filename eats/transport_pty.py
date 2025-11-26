@@ -16,6 +16,16 @@ import time
 from typing import Optional, List
 
 
+# Late import to avoid circular dependency
+def _get_audit_logger():
+    """Lazy import audit logger to avoid circular deps."""
+    try:
+        from eats_core.audit import get_audit_logger
+        return get_audit_logger()
+    except ImportError:
+        return None
+
+
 class BufferOverflowError(Exception):
     """Raised when buffer exceeds maximum size."""
     pass
@@ -142,10 +152,21 @@ class PTYTransport:
                 with self._lock:
                     # Check buffer limit before append
                     if len(self._buffer) + len(text) > self.max_buffer_size:
+                        buffer_size = len(self._buffer) + len(text)
                         self._overflow_error = BufferOverflowError(
                             f"Buffer exceeded {self.max_buffer_size} bytes. "
                             f"Process '{self.name}' generating too much output."
                         )
+
+                        # AUDIT: Log buffer overflow
+                        audit = _get_audit_logger()
+                        if audit:
+                            audit.log_buffer_overflow(
+                                agent_name=self.name,
+                                buffer_size=buffer_size,
+                                max_size=self.max_buffer_size
+                            )
+
                         self._running = False
                         break
 

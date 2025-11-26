@@ -37,8 +37,10 @@ from enum import Enum
 from .core import Agent, AgentDNA
 from .presets import get_cli_tool, CLI_TOOLS, CLIToolConfig
 from .logging import get_logger
+from .audit import get_audit_logger, AuditLogger
 
 logger = get_logger("orchestrator")
+audit = get_audit_logger()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -94,6 +96,8 @@ def validate_command(cmd: List[str]) -> None:
     # Check executable is approved
     executable = os.path.basename(cmd[0])
     if executable not in APPROVED_COMMANDS:
+        reason = f"'{executable}' not in approved list"
+        audit.log_command_validation(cmd=cmd, approved=False, reason=reason)
         raise SecurityError(
             f"Command '{executable}' not in approved list. "
             f"Approved commands: {', '.join(sorted(APPROVED_COMMANDS))}"
@@ -109,6 +113,8 @@ def validate_command(cmd: List[str]) -> None:
     for i, arg in enumerate(cmd):
         # Check for shell metacharacters that could enable injection
         if any(char in arg for char in [";", "|", "&", "$", "`", "\n", "\r"]):
+            reason = f"Shell metacharacters in argument: {arg}"
+            audit.log_command_validation(cmd=cmd, approved=False, reason=reason)
             raise SecurityError(
                 f"Shell metacharacters detected in argument: {arg}"
             )
@@ -117,11 +123,19 @@ def validate_command(cmd: List[str]) -> None:
         if arg in dangerous_flags:
             # Allow some safe usages (e.g., python -i -c is blocked, but python -i is ok)
             if i + 1 < len(cmd):
+                reason = f"Dangerous flag '{arg}' with argument"
+                audit.log_command_validation(cmd=cmd, approved=False, reason=reason)
                 raise SecurityError(
                     f"Dangerous flag '{arg}' detected with argument. "
                     f"Arbitrary code execution not allowed."
                 )
 
+    # AUDIT: Log approved command
+    audit.log_command_validation(
+        cmd=cmd,
+        approved=True,
+        reason="Passed all security checks"
+    )
     logger.debug(f"Command validated: {cmd[0]}")
 
 
@@ -254,6 +268,13 @@ class OutputParser:
 
         sanitized = text
         for pattern, replacement in dangerous_patterns:
+            # Check if pattern matches before replacing
+            if re.search(pattern, sanitized, flags=re.MULTILINE | re.DOTALL):
+                # AUDIT: Log injection attempt
+                audit.log_prompt_injection_attempt(
+                    pattern=pattern,
+                    text_preview=sanitized[:300]
+                )
             sanitized = re.sub(pattern, replacement, sanitized, flags=re.MULTILINE | re.DOTALL)
 
         # Truncate to reasonable size
@@ -437,13 +458,44 @@ class CLISequence:
             agent.start()
             self.agents[step.tool_name] = agent
 
+            # AUDIT: Log agent start
+            audit.log_agent_started(
+                agent_name=agent.id,
+                cmd=tool_config.cmd
+            )
+
         agent = self.agents[step.tool_name]
 
-        # Send prompt and get response
-        response = agent.ask(prompt, timeout=step.timeout)
+        # AUDIT: Log step start
+        audit.log_step_started(
+            step_name=f"{self.name}_{step.tool_name}",
+            tool_name=step.tool_name,
+            prompt_length=len(prompt)
+        )
 
-        step.duration = time.time() - start
-        return response
+        # Send prompt and get response
+        try:
+            response = agent.ask(prompt, timeout=step.timeout)
+            step.duration = time.time() - start
+
+            # AUDIT: Log step completion
+            audit.log_step_completed(
+                step_name=f"{self.name}_{step.tool_name}",
+                duration_seconds=step.duration,
+                output_length=len(response)
+            )
+
+            return response
+
+        except Exception as e:
+            step.duration = time.time() - start
+            # AUDIT: Log step failure
+            audit.log_step_failed(
+                step_name=f"{self.name}_{step.tool_name}",
+                error=e,
+                duration_seconds=step.duration
+            )
+            raise
 
     def _parse_step_output(self, output: str) -> Dict[str, Any]:
         """Parse step output into structured data."""
@@ -481,6 +533,11 @@ class CLISequence:
     def cleanup(self):
         """Stop all agents."""
         for agent in self.agents.values():
+            # AUDIT: Log agent stop
+            audit.log_agent_stopped(
+                agent_name=agent.id,
+                runtime_seconds=sum(t.duration for t in agent.turns) if agent.turns else 0
+            )
             agent.stop()
         self.agents.clear()
         logger.info(f"Sequence '{self.name}' cleanup complete")
