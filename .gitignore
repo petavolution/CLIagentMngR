@@ -44,3 +44,4 @@ debug-log.txt
 .coverage
 htmlcov/
 .eats_data/
+logs/
