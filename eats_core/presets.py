@@ -686,6 +686,25 @@ CLI_TOOLS: Dict[str, CLIToolConfig] = {
         description="Bash shell",
         requires_api_key=False,
     ),
+    # Mock AI Tools (for testing/demo)
+    "mock-coder": CLIToolConfig(
+        name="mock-coder",
+        cmd=["python", "tools/mock_ai_cli.py", "--mode", "coder"],
+        description="Mock AI code generator (simulates claude-code)",
+        requires_api_key=False,
+    ),
+    "mock-reviewer": CLIToolConfig(
+        name="mock-reviewer",
+        cmd=["python", "tools/mock_ai_cli.py", "--mode", "reviewer"],
+        description="Mock AI code reviewer (simulates gemini)",
+        requires_api_key=False,
+    ),
+    "mock-fixer": CLIToolConfig(
+        name="mock-fixer",
+        cmd=["python", "tools/mock_ai_cli.py", "--mode", "fixer"],
+        description="Mock AI code fixer (simulates aider)",
+        requires_api_key=False,
+    ),
 }
 
 
