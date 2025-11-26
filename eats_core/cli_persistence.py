@@ -458,15 +458,15 @@ class SequencePersistence:
         cursor = conn.cursor()
 
         try:
-            # FTS5 query
-            fts_query = f"""
-                SELECT
-                    s.id, s.sequence_id, s.step_number, s.tool_name,
-                    s.prompt, s.output, s.timestamp,
-                    snippet(step_outputs_fts, 3, '[MATCH]', '[/MATCH]', '...', 64) as snippet
-                FROM step_outputs_fts fts
-                JOIN steps s ON fts.step_id = s.id
-                WHERE step_outputs_fts MATCH ?
+            # FTS5 query using subquery approach (more compatible)
+            fts_query = """
+                SELECT s.id, s.sequence_id, s.step_number, s.tool_name,
+                       s.prompt, s.output, s.timestamp
+                FROM steps s
+                WHERE s.rowid IN (
+                    SELECT rowid FROM step_outputs_fts
+                    WHERE step_outputs_fts MATCH ?
+                )
             """
             params = [query]
 
@@ -474,7 +474,7 @@ class SequencePersistence:
                 fts_query += " AND s.tool_name = ?"
                 params.append(tool)
 
-            fts_query += " ORDER BY rank LIMIT ?"
+            fts_query += " LIMIT ?"
             params.append(limit)
 
             cursor.execute(fts_query, params)
