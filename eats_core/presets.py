@@ -686,7 +686,155 @@ CLI_TOOLS: Dict[str, CLIToolConfig] = {
         description="Bash shell",
         requires_api_key=False,
     ),
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # Real AI Coding CLI Tools
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    "claude-code": CLIToolConfig(
+        name="claude-code",
+        cmd=["claude-code"],
+        description="Anthropic Claude Code CLI - AI coding assistant",
+        requires_api_key=True,
+        api_key_env="ANTHROPIC_API_KEY",
+    ),
+    "aider": CLIToolConfig(
+        name="aider",
+        cmd=["aider", "--yes-always"],  # Auto-confirm for automation
+        description="Aider - AI pair programming in terminal",
+        requires_api_key=True,
+        api_key_env="OPENAI_API_KEY",
+    ),
+    "codex": CLIToolConfig(
+        name="codex",
+        cmd=["codex"],
+        description="OpenAI Codex CLI",
+        requires_api_key=True,
+        api_key_env="OPENAI_API_KEY",
+    ),
+    "copilot-cli": CLIToolConfig(
+        name="copilot-cli",
+        cmd=["github-copilot-cli"],
+        description="GitHub Copilot CLI",
+        requires_api_key=True,
+    ),
+    "gemini-cli": CLIToolConfig(
+        name="gemini-cli",
+        cmd=["gemini"],
+        description="Google Gemini CLI",
+        requires_api_key=True,
+        api_key_env="GOOGLE_API_KEY",
+    ),
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # Common POSIX/Linux CLI Tools
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    # Text Processing
+    "grep": CLIToolConfig(
+        name="grep",
+        cmd=["grep"],
+        description="Search text patterns",
+        requires_api_key=False,
+    ),
+    "awk": CLIToolConfig(
+        name="awk",
+        cmd=["awk"],
+        description="Pattern scanning and processing",
+        requires_api_key=False,
+    ),
+    "sed": CLIToolConfig(
+        name="sed",
+        cmd=["sed"],
+        description="Stream editor",
+        requires_api_key=False,
+    ),
+    "jq": CLIToolConfig(
+        name="jq",
+        cmd=["jq"],
+        description="JSON processor",
+        requires_api_key=False,
+    ),
+    "ripgrep": CLIToolConfig(
+        name="ripgrep",
+        cmd=["rg"],
+        description="Fast recursive grep",
+        requires_api_key=False,
+    ),
+
+    # Version Control
+    "git": CLIToolConfig(
+        name="git",
+        cmd=["git"],
+        description="Git version control",
+        requires_api_key=False,
+    ),
+
+    # Build Tools
+    "make": CLIToolConfig(
+        name="make",
+        cmd=["make"],
+        description="Build automation",
+        requires_api_key=False,
+    ),
+    "npm": CLIToolConfig(
+        name="npm",
+        cmd=["npm"],
+        description="Node package manager",
+        requires_api_key=False,
+    ),
+    "pip": CLIToolConfig(
+        name="pip",
+        cmd=["pip"],
+        description="Python package installer",
+        requires_api_key=False,
+    ),
+
+    # Testing Tools
+    "pytest": CLIToolConfig(
+        name="pytest",
+        cmd=["pytest"],
+        description="Python testing framework",
+        requires_api_key=False,
+    ),
+    "jest": CLIToolConfig(
+        name="jest",
+        cmd=["jest"],
+        description="JavaScript testing framework",
+        requires_api_key=False,
+    ),
+
+    # Container Tools
+    "docker": CLIToolConfig(
+        name="docker",
+        cmd=["docker"],
+        description="Container platform",
+        requires_api_key=False,
+    ),
+
+    # Code Analysis
+    "pylint": CLIToolConfig(
+        name="pylint",
+        cmd=["pylint"],
+        description="Python code analyzer",
+        requires_api_key=False,
+    ),
+    "eslint": CLIToolConfig(
+        name="eslint",
+        cmd=["eslint"],
+        description="JavaScript linter",
+        requires_api_key=False,
+    ),
+    "black": CLIToolConfig(
+        name="black",
+        cmd=["black"],
+        description="Python code formatter",
+        requires_api_key=False,
+    ),
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # Mock AI Tools (for testing/demo)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     "mock-coder": CLIToolConfig(
         name="mock-coder",
         cmd=["python", "tools/mock_ai_cli.py", "--mode", "coder"],
