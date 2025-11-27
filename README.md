@@ -1,285 +1,366 @@
-# EATS - Evolutionary Agent Tree System
+# EATS - CLI Agent Orchestration Framework
 
-A biologically-inspired multi-agent orchestration framework for terminal-driven LLM coding agents.
+**Simple, secure orchestration for AI coding CLI tools.**
 
-## Quick Start
+Run AI CLI tools (claude-code, gemini, aider) in sequences, parse outputs, chain them with follow-ups, and save everything to text files + SQLite.
+
+---
+
+## 🚀 Quick Start
+
+```python
+from eats_core import CLISequence
+
+# Create sequence (auto-saves to text files + SQLite)
+seq = CLISequence("code-review-fix")
+
+# Add steps with output chaining
+seq.add_step("claude-code", "Write a REST API for user authentication")
+seq.add_step("gemini", "Review for security issues", use_previous_output=True)
+seq.add_step("aider", "Fix any issues found", use_previous_output=True)
+
+# Run (automatically saved!)
+result = seq.run()
+seq.cleanup()
+
+print(f"Done! Saved to: logs/sequences/*/{result['id']}/")
+```
+
+**What happens:**
+1. Spawns each CLI tool in a pseudo-terminal
+2. Sends prompts, captures outputs
+3. Chains outputs between steps
+4. Saves everything to:
+   - **Text files**: `logs/sequences/2025-11-26/seq-xxxxx/step-1-claude-code.txt`
+   - **SQLite DB**: `logs/sequences/sequences.db` (queryable, full-text search)
+
+**See:** [Quick Start Guide](docu/QUICK-START.md) | [Examples](examples/)
+
+---
+
+## 🎯 Core Features
+
+### ✅ CLI Tool Orchestration
+- Run AI coding CLIs: **claude-code**, **gemini**, **aider**, **python**, etc.
+- Spawn in pseudo-terminals (PTY) or tmux sessions
+- Simple API: `add_step()` → `run()` → auto-saved
+
+### ✅ Output Parsing & Chaining
+- Parse code blocks, errors, file paths, test results
+- Chain outputs: Step 2 receives Step 1's output
+- Prompt injection detection & sanitization
+
+### ✅ Dual-Layer Persistence
+- **Text files**: One `.txt` per step (grep-able, diff-able, human-readable)
+- **SQLite**: Metadata + full-text search (FTS5)
+- Query sequences by status, tool, date
+- Export/import for backups
+
+### ✅ Security Hardening
+- Command allowlist (blocks dangerous tools)
+- Buffer overflow protection (10MB limit)
+- Shell escaping (`shlex.quote()`)
+- Comprehensive audit logging
+- Prompt injection sanitization
+
+### ✅ Zero Dependencies
+Core functionality requires **only Python 3.8+** (no external packages!)
+
+---
+
+## 📦 Installation
 
 ```bash
-# Run demo to verify installation
+# Clone repository
+git clone <repo-url>
+cd CLIagentmngr
+
+# No dependencies needed for core!
+# Optional: Install AI CLI tools
+# - claude-code: npm install -g @anthropic-ai/claude-cli
+# - gemini: pip install google-generativeai
+# - aider: pip install aider-chat
+```
+
+---
+
+## 📚 Usage Examples
+
+### Basic Sequence
+```python
+from eats_core import CLISequence
+
+seq = CLISequence("hello-world")
+seq.add_step("python", "print('Hello from EATS!')")
+result = seq.run()
+seq.cleanup()
+```
+
+### Multi-Step with Chaining
+```python
+seq = CLISequence("iterative-refinement")
+seq.add_step("claude-code", "Design a microservices architecture")
+seq.add_step("claude-code", "Refine and improve", use_previous_output=True)
+seq.add_step("claude-code", "Finalize with deployment plan", use_previous_output=True)
+result = seq.run()
+```
+
+### Query Saved Sequences
+```python
+from eats_core.cli_persistence import get_persistence
+
+persistence = get_persistence()
+
+# Find all completed sequences
+sequences = persistence.query_sequences(status="completed")
+
+# Full-text search
+results = persistence.search_outputs("authentication bug")
+
+# Statistics
+stats = persistence.get_statistics()
+print(f"Total sequences: {stats['total_sequences']}")
+print(f"Success rate: {stats['success_rate']}%")
+```
+
+### Inspect Saved Files
+```bash
+# Text files (one per step)
+$ cat logs/sequences/2025-11-26/seq-abc123/step-1-claude-code.txt
+# Step 1: claude-code
+# Prompt: Write a REST API...
+# Duration: 12.34s
+# Status: success
+#======================================================================
+[Full CLI output here]
+
+# SQLite database
+$ sqlite3 logs/sequences/sequences.db
+sqlite> SELECT * FROM sequences WHERE status = 'completed';
+sqlite> SELECT * FROM step_outputs_fts WHERE step_outputs_fts MATCH 'authentication';
+```
+
+**More examples:** [examples/simple_workflow.py](examples/simple_workflow.py)
+
+---
+
+## 🏗️ Architecture
+
+### Core Modules (1,800 lines total)
+
+```
+eats_core/
+├── transport.py          (580 lines) - PTY + Tmux transports
+├── cli_orchestrator.py   (678 lines) - Sequencing + parsing
+├── cli_persistence.py    (550 lines) - Text files + SQLite
+├── audit.py              (532 lines) - Security audit logging
+└── audit_query.py        (328 lines) - Query audit logs
+```
+
+### Data Flow
+
+```
+┌─────────────────────────────────────────────────────┐
+│ CLISequence                                         │
+│  - add_step(tool, prompt, use_previous_output)      │
+│  - run() → auto-saves                               │
+└─────────────────────────────────────────────────────┘
+                    │
+                    ├─→ Transport (PTY/Tmux)
+                    │    - spawn CLI process
+                    │    - send_and_wait(prompt)
+                    │    - recv_now() → output
+                    │
+                    ├─→ OutputParser
+                    │    - extract_code_blocks()
+                    │    - sanitize_for_chaining()
+                    │
+                    └─→ SequencePersistence
+                         ├─→ Text files (grep-able)
+                         └─→ SQLite (queryable)
+```
+
+### Storage Layout
+
+```
+logs/
+├── sequences/
+│   ├── 2025-11-26/
+│   │   ├── seq-abc123/
+│   │   │   ├── metadata.json
+│   │   │   ├── step-1-claude-code.txt
+│   │   │   ├── step-2-gemini.txt
+│   │   │   └── step-3-aider.txt
+│   │   └── seq-def456/...
+│   └── sequences.db (SQLite)
+└── audit/
+    └── audit_20251126.jsonl
+```
+
+---
+
+## 🔒 Security Features
+
+All sequences are automatically protected:
+
+| Feature | Description |
+|---------|-------------|
+| **Command Allowlist** | Only approved CLI tools can run (python, claude-code, gemini, aider, etc.) |
+| **Buffer Overflow Protection** | 10MB limit per process, raises `BufferOverflowError` if exceeded |
+| **Prompt Injection Detection** | Removes control tokens, instruction overrides from chained outputs |
+| **Shell Escaping** | All commands properly escaped with `shlex.quote()` |
+| **Audit Logging** | All commands, rejections, errors logged to `logs/audit/*.jsonl` |
+
+**See:** [Security Audit Findings](docu/SECURITY-AUDIT-FINDINGS.md)
+
+---
+
+## 🔍 Querying & Analysis
+
+### Python API
+```python
+from eats_core.cli_persistence import get_persistence
+
+p = get_persistence()
+
+# Filter sequences
+recent = p.query_sequences(status="completed", since=time.time()-86400)
+
+# Full-text search (FTS5)
+matches = p.search_outputs("authentication", tool="claude-code")
+
+# Statistics
+stats = p.get_statistics()
+```
+
+### Command Line
+```bash
+# Query audit logs
+python -m eats_core.audit_query --severity CRITICAL --last 24h
+
+# SQLite queries
+sqlite3 logs/sequences/sequences.db << EOF
+  SELECT tool_name, COUNT(*)
+  FROM steps
+  GROUP BY tool_name;
+EOF
+
+# Grep text files
+grep -r "error" logs/sequences/
+```
+
+---
+
+## 📖 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Quick Start Guide](docu/QUICK-START.md) | 5-minute tutorial + common patterns |
+| [Simplification Plan](docu/CODEBASE-SIMPLIFICATION-PLAN.md) | Architecture analysis & roadmap |
+| [Security Audit](docu/SECURITY-AUDIT-FINDINGS.md) | Vulnerability assessment & fixes |
+| [MPC Architecture](docu/mpc-architecture-plan.md) | Advanced: Meta-Program-Controller design |
+
+---
+
+## 🎮 Advanced Features (Optional)
+
+The project includes advanced features for power users:
+
+- **Evolution Engine**: Genetic algorithms for agent optimization
+- **Swarm Intelligence**: Hierarchical agent trees
+- **LLM Judge**: AI-based fitness evaluation
+- **GhostSwarm**: Visual multi-terminal tmux mode
+- **Conflict Resolution**: Contradiction detection & arbitration
+- **Web UI**: FastAPI dashboard (run with `python run_core.py server`)
+
+**See:** [run_core.py](run_core.py) for all modes
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run simple workflow examples (uses Python - always works)
+python examples/simple_workflow.py
+
+# Run audit logging demo
+python examples/audit_logging_demo.py
+
+# Run full test suite
+python run_core.py test
+
+# Run evolution demo (advanced)
 python run_core.py demo
-
-# Start API server at http://localhost:8000
-python run_core.py server
-
-# Interactive CLI
-python run_core.py cli
-
-# GhostSwarm visual mode (requires libtmux)
-python run_core.py ghost 5
-
-# Show help
-python run_core.py help
 ```
 
-## Project Structure
+---
 
-```
-CLIagentmngr/
-├── run_core.py         # Unified entry point (use this)
-├── eats_core/          # Core v2.0 - Primary module (recommended)
-│   ├── core.py         # Transport, Agent DNA, Evolution
-│   ├── swarm.py        # Hierarchical agent tree
-│   ├── judge.py        # LLM-as-judge fitness
-│   ├── pipeline.py     # Result aggregation
-│   ├── server.py       # API + CLI
-│   └── ...
-├── eats/               # Legacy v1.0 (deprecated)
-│   ├── ghost_swarm.py  # Visual multi-terminal (still useful)
-│   └── ...
-└── docu/               # Documentation
-    └── project-vision.md
-```
+## 🗺️ Roadmap
 
-## Minimal Dependencies
+- [x] Core CLI orchestration
+- [x] Text file + SQLite persistence
+- [x] Security hardening (audit, validation, sanitization)
+- [x] Output parsing & chaining
+- [x] Full-text search (FTS5)
+- [ ] Move advanced features to `eats_advanced/`
+- [ ] Replay capability (re-run saved sequences)
+- [ ] Streaming outputs (real-time display)
+- [ ] Custom tool adapters
+- [ ] Integration tests with real AI CLIs
 
-Core functionality has **zero external dependencies**. Optional:
-- `fastapi` + `uvicorn` for web server
-- `libtmux` for tmux/GhostSwarm transport
-- `rich` for pretty CLI output
+---
 
-## Overview
+## 📊 Project Stats
 
-EATS enables you to:
-- **Spawn multiple LLM CLI agents** in parallel terminal sessions (PTY or tmux)
-- **Evolve agent configurations** using genetic algorithms (mutation, crossover, selection)
-- **Visualize the agent tree** in real-time via enhanced web UI with dagre layout
-- **LLM-as-judge fitness evaluation** for sophisticated quality assessment
-- **Hierarchical agent trees** with Research/Creative/Execution branches
-- **GhostSwarm mode** for visual multi-terminal orchestration
-- **Human-supervised control** - you stay in the loop
+- **Core code**: ~1,800 lines (3 main files)
+- **Total code**: ~20,000 lines (including advanced features)
+- **Dependencies**: 0 (core), 3 (web UI), 1 (tmux mode)
+- **Language**: Python 3.8+
+- **License**: MIT (TODO: Add LICENSE file)
 
-## Architecture
+---
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    MultiAgentOrchestrator                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────────┐ │
-│  │ MetaManager  │  │ EvoEngine    │  │ HierarchicalAgentTree      │ │
-│  │ (sessions)   │  │ (genetics)   │  │ (Research/Creative/Exec)   │ │
-│  └──────┬───────┘  └──────┬───────┘  └────────────┬───────────────┘ │
-│         │                 │                       │                 │
-│  ┌──────┴─────────────────┴───────────────────────┴───────────────┐ │
-│  │ OrchestrationGraph + OutputProcessor + EventBus                │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        │                       │                       │
-   ┌────┴────┐             ┌────┴────┐             ┌────┴────┐
-   │ Agent 1 │             │ Agent 2 │             │ Agent N │
-   │ (PTY)   │             │ (tmux)  │             │ (PTY)   │
-   └─────────┘             └─────────┘             └─────────┘
-```
+## 🤝 Contributing
 
-## Installation
+Contributions welcome! Focus areas:
 
-```bash
-pip install -r requirements.txt
-```
+1. **Core simplification**: Make the basic workflow even simpler
+2. **Adapters**: Support for more AI CLI tools
+3. **Testing**: Integration tests with real tools
+4. **Documentation**: More examples and patterns
+5. **Performance**: Optimize persistence layer
 
-### GhostSwarm (Visual Multi-Terminal)
+---
 
-```bash
-# Via unified entry point (recommended)
-python run_core.py ghost 4
+## 💡 Use Cases
 
-# Or directly (legacy)
-python -m eats.ghost_swarm --agents 4 --layout fan
-```
+- **Code generation workflows**: Generate → Review → Fix → Test
+- **Multi-LLM consensus**: Query multiple LLMs, compare outputs
+- **Iterative refinement**: Progressively improve outputs
+- **TDD workflows**: Tests → Implementation → Validation
+- **Security review**: Generate → Scan → Fix vulnerabilities
+- **Documentation**: Code → Analysis → Docs generation
 
-## Usage
+---
 
-### Enhanced Web UI
+## 📝 License
 
-The web UI features:
-- **Dagre layout** for hierarchical agent visualization
-- **Real-time updates** via Server-Sent Events
-- **Fitness charts** showing evolution progress
-- **Agent inspection panel** with conversation logs
-- **Interactive graph** - click agents to inspect
+TODO: Add LICENSE file (suggest MIT)
 
-### CLI Supervisor Commands
+---
 
-```
-eats> spawn coder           # Spawn a coder agent
-eats> agents                # List all agents
-eats> select abc123         # Select agent by ID prefix
-eats> prompt Write hello.py # Send prompt to selected agent
-eats> tail                  # View last output
-eats> log                   # View conversation history
-eats> task Sort a list      # Create a task
-eats> evolve 3              # Run 3 generations of evolution
-eats> fitness               # View fitness across generations
-eats> graph                 # View agent tree structure
-eats> status                # System status
-eats> reset                 # Reset all agents
-eats> quit                  # Exit
-```
+## 🙏 Acknowledgments
 
-### GhostSwarm Commands
+Built with focus on:
+- **Simplicity**: Core functionality in ~1,800 lines
+- **Security**: Defense-in-depth hardening
+- **Reliability**: Robust error handling & persistence
+- **Usability**: Simple API, clear documentation
 
-```
-ghost> list                 # List all agents in swarm
-ghost> send Coder_Alpha msg # Send to specific agent
-ghost> broadcast msg        # Send to all agents
-ghost> read Coder_Alpha     # Read agent's output
-ghost> status               # Show status table
-ghost> quit                 # Exit
-```
+Inspired by the need for simple, reliable CLI tool orchestration with comprehensive logging and querying capabilities.
 
-### REST API
+---
 
-```bash
-# Spawn agent
-curl -X POST http://localhost:8000/agents \
-  -H "Content-Type: application/json" \
-  -d '{"role": "coder", "system_prompt": "You are helpful."}'
+**Get Started:** [Quick Start Guide](docu/QUICK-START.md) | [Examples](examples/simple_workflow.py)
 
-# List agents
-curl http://localhost:8000/agents
-
-# Send prompt
-curl -X POST http://localhost:8000/agents/{id}/prompt \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Write a sorting function"}'
-
-# Create task
-curl -X POST http://localhost:8000/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"description": "Write a binary search"}'
-
-# Run evolution
-curl -X POST http://localhost:8000/evolution/run \
-  -H "Content-Type: application/json" \
-  -d '{"task_id": "...", "population_size": 4, "max_generations": 3}'
-
-# Get graph (Cytoscape.js format)
-curl http://localhost:8000/graph
-
-# Stream events (SSE)
-curl http://localhost:8000/events
-```
-
-## Key Concepts
-
-### Agent Blueprint (DNA)
-The genetic material of an agent:
-- **Phenotype**: Role, system prompt, tool access
-- **Genotype**: Temperature, top-p, context configuration
-
-### Hierarchical Agent Tree
-```
-Meta-Orchestrator (Root)
-├── Research Branch
-│   ├── Web Search Agents
-│   ├── Document Analysis Agents
-│   └── Synthesis Agent
-├── Creative Branch
-│   ├── Text Generators
-│   ├── Image Coordinators
-│   └── Multimodal Fusion Agent
-└── Execution Branch
-    ├── Code Executors
-    ├── File System Agents
-    └── QA Agent
-```
-
-### Fitness Functions
-- `combined_fitness`: Multi-factor evaluation (length, code, explanations, speed)
-- `keyword_fitness`: Presence of expected keywords
-- `create_llm_judge_fitness()`: LLM-as-judge evaluation
-- `create_hybrid_fitness()`: Combined LLM + heuristic
-
-### Evolution Cycle
-1. Create initial population from base blueprint
-2. Spawn agents and evaluate on task
-3. **LLM-as-judge** scores responses on correctness, clarity, efficiency
-4. Select top 20%, prune bottom 10%
-5. Mutate (prompt drift, temperature variation) + crossover
-6. Repeat with **senescence tracking** for performance decay
-
-### Output Processing Pipeline
-- **Semantic cache**: Avoid redundant processing
-- **DAG result tree**: Track output lineage
-- **Fusion methods**: Ensemble voting, weighted synthesis, hierarchical roll-up
-
-### GhostSwarm Visual Layout
-- **Probability Fan (Wahrscheinlichkeitsfächer)**: Windows arranged in fan pattern
-- **Grid Layout**: Windows in rows/columns
-- **Hierarchy Layout**: Tree-based positioning
-
-## Configuration
-
-### Using Real LLM CLIs
-
-Edit `eats/api.py` and change `DEFAULT_AGENT_CMD`:
-
-```python
-# For Aider
-DEFAULT_AGENT_CMD = ["aider"]
-
-# For Open Interpreter
-DEFAULT_AGENT_CMD = ["interpreter"]
-
-# For GPT4All
-DEFAULT_AGENT_CMD = ["gpt4all", "--model", "path/to/model.gguf"]
-
-# For Claude Code
-DEFAULT_AGENT_CMD = ["claude"]
-```
-
-### Evolution Parameters
-
-```python
-EvolutionConfig(
-    population_size=4,              # Agents per generation
-    top_k_survivors=2,              # How many survive
-    mutation_rate=0.2,              # Probability of mutation
-    prompt_mutation_strength=0.1,   # How much to perturb prompts
-    temperature_mutation_range=0.1, # Max temp change
-    max_generations=5,              # Evolution iterations
-    max_turn_seconds=30.0,          # Timeout per agent response
-)
-```
-
-### GhostSwarm Options
-
-```bash
-python -m eats.ghost_swarm \
-  --session my_swarm \
-  --terminal alacritty \
-  --agents 5 \
-  --layout fan \
-  --cmd aider
-```
-
-## 2026 Target Hardware
-
-Optimized for home server deployment:
-- GPU: RTX 5090 32GB GDDR7 (Llama 3.1 70B Q4, Flux Schnell)
-- CPU: AMD Ryzen 9 9950X (16 core)
-- RAM: 128 GB DDR5-6000
-- SSD: 4 TB NVMe
-
-## Future Extensions
-
-- **SSH transport**: Spawn agents on remote servers via paramiko
-- **VR visualization**: 3D agent tree in Godot/Unity
-- **Image generation agents**: Multimodal workflows with ComfyUI
-- **Vector embeddings**: Semantic similarity with sentence-transformers
-- **Redis messaging**: Distributed agent communication
-- **vLLM integration**: High-performance local LLM serving
-
-## License
-
-MIT
+**Questions?** Check [documentation](docu/) or open an issue.
