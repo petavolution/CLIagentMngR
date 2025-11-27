@@ -43,6 +43,7 @@ from eats_core.cli_orchestrator import CLISequence
 from eats_core.cli_persistence import get_persistence
 from eats_core.presets import list_cli_tools, get_cli_tool
 from eats_core.template_engine import TemplateEngine
+from eats_core.tool_detection import ToolSelector, check_setup
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -270,6 +271,9 @@ def cmd_run(args, config: EATSConfig):
     print(f"Description: {workflow['description']}")
     print(f"{'='*60}\n")
 
+    # Initialize tool selector for automatic fallback
+    tool_selector = ToolSelector(notify=True)
+
     # Get input
     input_text = args.input
     if args.file:
@@ -287,9 +291,12 @@ def cmd_run(args, config: EATSConfig):
         # Run steps in parallel
         steps = []
         for i, step_def in enumerate(workflow['steps']):
+            # Select tool with automatic fallback to mock tool
+            tool_name = tool_selector.select(step_def['tool'], category='coder')
+
             prompt = step_def['prompt_template'].format(input=input_text)
             steps.append(StepConfig(
-                tool_name=step_def['tool'],
+                tool_name=tool_name,
                 prompt=prompt,
                 timeout=config.get('defaults.timeout', 300),
                 retries=config.get('defaults.max_retries', 2) if config.get('defaults.auto_retry') else 0,
@@ -315,6 +322,9 @@ def cmd_run(args, config: EATSConfig):
         for i, step_def in enumerate(workflow['steps'], 1):
             print(f"Step {i}/{len(workflow['steps'])}: {step_def['description']}")
 
+            # Select tool with automatic fallback
+            tool_name = tool_selector.select(step_def['tool'], category='coder')
+
             # Build prompt
             if step_def.get('use_previous_output') and previous_output:
                 prompt = step_def['prompt_template'].format(
@@ -322,10 +332,14 @@ def cmd_run(args, config: EATSConfig):
                     previous_output=previous_output,
                 )
             else:
-                prompt = step_def['prompt_template'].format(input=input_text)
+                # Provide empty previous_output for templates that reference it
+                prompt = step_def['prompt_template'].format(
+                    input=input_text,
+                    previous_output=""
+                )
 
             seq.add_step(
-                tool_name=step_def['tool'],
+                tool_name=tool_name,
                 prompt=prompt,
             )
 
@@ -431,38 +445,25 @@ def cmd_status(args, config: EATSConfig):
     """Show sequence status."""
     persistence = get_persistence()
 
-    if args.sequence_id:
-        # Show specific sequence
-        sequences = persistence.query_sequences(
-            sequence_id=args.sequence_id,
-            limit=1,
-        )
-        if not sequences:
-            print(f"❌ Sequence not found: {args.sequence_id}")
-            return 1
+    # Show recent sequences (simplified - no individual sequence lookup for now)
+    sequences = persistence.query_sequences(limit=10)
 
-        seq = sequences[0]
-        print(f"\nSequence: {seq['id']}")
-        print(f"Name: {seq['name']}")
-        print(f"Status: {seq['status']}")
-        print(f"Created: {seq['created_at']}")
-        print(f"Steps: {seq['total_steps']} total, {seq['successful_steps']} successful")
-        print(f"Duration: {seq['duration']:.2f}s")
+    print("\n" + "="*60)
+    print("Recent Sequences")
+    print("="*60 + "\n")
 
-    else:
-        # Show recent sequences
-        sequences = persistence.query_sequences(limit=10)
+    if not sequences:
+        print("No sequences found. Run a workflow first:")
+        print("  eats run code-review --file mycode.py")
+        return 0
 
-        print("\n" + "="*60)
-        print("Recent Sequences")
-        print("="*60 + "\n")
-
-        for seq in sequences:
-            print(f"{seq['id']}: {seq['name']}")
-            print(f"  Status: {seq['status']}")
-            print(f"  Steps: {seq['successful_steps']}/{seq['total_steps']}")
+    for seq in sequences:
+        print(f"{seq['id']}: {seq['name']}")
+        print(f"  Status: {seq['status']}")
+        print(f"  Steps: {seq['successful_steps']}/{seq['total_steps']}")
+        if 'duration' in seq and seq['duration']:
             print(f"  Duration: {seq['duration']:.2f}s")
-            print()
+        print()
 
     return 0
 
